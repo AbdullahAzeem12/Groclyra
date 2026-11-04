@@ -63,3 +63,7 @@ screen_*.png
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
 lib/firebase_options.dart
+
+# APK release files (use GitHub Releases instead)
+*.apk
+*.aab

@@ -1,0 +1,48 @@
+ {
+  "project_info": {
+    "project_number": "137836432821",
+    "firebase_url": "https://groclyra-default-rtdb.firebaseio.com",
+    "project_id": "groclyra",
+    "storage_bucket": "groclyra.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:137836432821:android:b36667832844c8f4ccddfc",
+        "android_client_info": {
+          "package_name": "com.example.myapplication"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "137836432821-3jrndfqn3lg87b51r2123mrtppqqkv6p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.myapplication",
+            "certificate_hash": "d0691655554e97a95c681bf054fc99b131deaacb"
+          }
+        },
+        {
+          "client_id": "137836432821-fhp3ci51qfk3far3ut78jgpj4pvknp24.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBYQRkjny0g8y5ZBCJMUkwJ5Rhf80hQnVM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "137836432821-fhp3ci51qfk3far3ut78jgpj4pvknp24.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

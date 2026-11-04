@@ -1,0 +1,21 @@
+{
+    "java.compile.nullAnalysis.mode": "automatic",
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "java.jdt.ls.java.home": "C:\\Users\\khero\\AndroidStudioProjects\\Groclyra\\oracleJdk-26",
+    "java.configuration.runtimes": [
+        {
+            "name": "JavaSE-26",
+            "path": "C:\\Users\\khero\\AndroidStudioProjects\\Groclyra\\oracleJdk-26",
+            "default": true
+        }
+    ],
+    "cSpell.words": [
+        "Baik",
+        "cnic",
+        "dhaba",
+        "Groclyra",
+        "kyc",
+        "Patisserie"
+    ],
+    "python.defaultInterpreterPath": "C:\\Users\\khero\\AppData\\Local\\Programs\\Python\\Python312\\python.exe"
+}

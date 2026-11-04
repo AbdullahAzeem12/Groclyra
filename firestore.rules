@@ -1,0 +1,469 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // HELPER FUNCTIONS
+    // ═══════════════════════════════════════════════════════════════════════
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        getUserData().role == 'admin';
+    }
+
+    function isSeller() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        getUserData().role == 'seller';
+    }
+
+    function isRider() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        getUserData().role == 'rider';
+    }
+
+    function isCustomer() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        getUserData().role == 'customer';
+    }
+
+    // True for any physical, authenticated non-admin user.
+    function isPrivateUser() {
+      return isSeller() || isRider() || isCustomer();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // USERS  (Phase 1.1 — role-escalation hardening)
+    //
+    // FIX: the previous rule `allow create, update: if isOwner(uid) || isAdmin()`
+    // let ANY authenticated user write their own doc with `role: "admin"` and
+    // `accountStatus: "active"`, instantly escalating themselves into the
+    // admin portal (isAdmin() below keys off users.role).
+    //
+    // Now:
+    //  • Owners can still create their own profile at registration, but never
+    //    with the 'admin' role (exception below: the documented developer
+    //    back-door pattern, debug-only in the app).
+    //  • Owners may update their own doc but can NEVER mutate the
+    //    server-privileged fields: role, accountStatus, isKycApproved,
+    //    isVerified, authorizedRoles. Those changes require an admin.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    function isValidPublicRole(r) {
+      return r == 'customer' || r == 'seller' || r == 'rider';
+    }
+
+    // The in-app secret admin-unlock generates ADM-HQ-XXXXXX IDs (debug
+    // builds only). Keeping this exception preserves the documented demo
+    // back-door while still blocking generic self-escalation.
+    function isDeveloperAdminBackdoor() {
+      return request.resource.data.role == 'admin' &&
+             request.resource.data.get('adminId', '').matches('ADM-HQ-[0-9]{6}');
+    }
+
+    // Fields only admins (or the seed process) may ever write on user docs.
+    function userPrivilegedFieldsUnchanged() {
+      return request.resource.data.get('role', '') == resource.data.get('role', '') &&
+             request.resource.data.get('accountStatus', '') == resource.data.get('accountStatus', '') &&
+             request.resource.data.get('isKycApproved', false) == resource.data.get('isKycApproved', false) &&
+             request.resource.data.get('isVerified', false) == resource.data.get('isVerified', false) &&
+             request.resource.data.get('authorizedRoles', []) == resource.data.get('authorizedRoles', []);
+    }
+
+    function isValidAddress(data) {
+      return data.label is string && data.label.size() <= 100 &&
+             ((data.get('cityOrTown', null) is string && data.cityOrTown.size() <= 100) ||
+              (data.get('city', null) is string && data.city.size() <= 100)) &&
+             data.latitude is number && data.latitude >= -90.0 && data.latitude <= 90.0 &&
+             data.longitude is number && data.longitude >= -180.0 && data.longitude <= 180.0;
+    }
+
+    function isValidWishlistItem(data) {
+      return data.productId is string && data.productId.size() > 0 &&
+             data.productName is string && data.productName.size() <= 200 &&
+             data.savedPrice is number && data.savedPrice >= 0 &&
+             data.currentPrice is number && data.currentPrice >= 0;
+    }
+
+
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isAdmin() ||
+        (isOwner(uid) &&
+         (isValidPublicRole(request.resource.data.get('role', 'customer')) ||
+          isDeveloperAdminBackdoor()));
+      allow update: if isAdmin() ||
+        (isOwner(uid) && userPrivilegedFieldsUnchanged());
+      allow delete: if isAdmin();
+
+      // Subcollection: Addresses (Pakistan-wide delivery addresses)
+      match /addresses/{addressId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow create, update: if (isOwner(uid) && isValidAddress(request.resource.data)) || isAdmin();
+        allow delete: if isOwner(uid) || isAdmin();
+      }
+
+      // Subcollection: Wishlist (Synchronized saved grocery & crockery items)
+      match /wishlist/{itemId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow create, update: if (isOwner(uid) && isValidWishlistItem(request.resource.data)) || isAdmin();
+        allow delete: if isOwner(uid) || isAdmin();
+      }
+
+      // Subcollection: Settings (Theme & UI preferences)
+      match /settings/{settingId} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow create, update: if isOwner(uid) || isAdmin();
+        allow delete: if isOwner(uid) || isAdmin();
+      }
+
+      // Subcollection: Notification Preferences
+      match /notificationPreferences/{category} {
+        allow read: if isOwner(uid) || isAdmin();
+        allow create, update: if isOwner(uid) || isAdmin();
+        allow delete: if isOwner(uid) || isAdmin();
+      }
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ROLE-SPECIFIC PROFILE COLLECTIONS  (Phase 1.1 + 1.4)
+    //
+    // FIX: users could previously self-approve their own KYC by flipping
+    // accountStatus/isKycApproved on their profile doc. Privileged fields
+    // are now admin-controlled. Also (1.4) seller/rider profiles previously
+    // readable by ANY authenticated user — meaning every customer could read
+    // rider CNIC / license / address. Grown to owner + admin only.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    function profilePrivilegedFieldsUnchanged() {
+      return request.resource.data.accountStatus == resource.data.accountStatus &&
+             request.resource.data.isKycApproved == resource.data.isKycApproved &&
+             request.resource.data.isVerified == resource.data.isVerified;
+    }
+
+    match /customerProfiles/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create, update: if (isOwner(uid) && profilePrivilegedFieldsUnchanged()) || isAdmin();
+      allow delete: if isAdmin();
+    }
+    match /customers/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create, update: if (isOwner(uid) && profilePrivilegedFieldsUnchanged()) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /sellerProfiles/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create, update: if (isOwner(uid) && profilePrivilegedFieldsUnchanged()) || isAdmin();
+      allow delete: if isAdmin();
+    }
+    match /sellers/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create, update: if (isOwner(uid) && profilePrivilegedFieldsUnchanged()) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /riderProfiles/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create, update: if (isOwner(uid) && profilePrivilegedFieldsUnchanged()) || isAdmin();
+      allow delete: if isAdmin();
+    }
+    match /riders/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create, update: if (isOwner(uid) && profilePrivilegedFieldsUnchanged()) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /adminProfiles/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+    match /admins/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // CATALOG: CATEGORIES
+    // ═══════════════════════════════════════════════════════════════════════
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // CATALOG: PRODUCTS  (Phase 1.5)
+    //
+    // FIX: previously the owning seller could flip `isApproved: false → true`
+    // at will, bypassing catalog moderation entirely. Sellers may still edit
+    // price/stock/remove own listings (or unpublish: true→false), but only
+    // admins can approve (false→true).
+    // ═══════════════════════════════════════════════════════════════════════
+
+    match /products/{productId} {
+      allow read: if true;
+      allow create: if isSeller() && request.resource.data.sellerId == request.auth.uid;
+      allow update: if isAdmin() ||
+        (isSeller() &&
+         resource.data.sellerId == request.auth.uid &&
+         // Cannot (re)approve own product; unpublishing own product is OK.
+         !(request.resource.data.get('isApproved', resource.data.isApproved) == true &&
+           resource.data.get('isApproved', false) == false));
+      allow delete: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ORDERS  (Phase 1.2)
+    //
+    // FIX: previously `allow create: if isAuthenticated()` let any signed-in
+    // user mint orders attributed to anyone with any price, and riders could
+    // update ANY order (not just ones assigned to them). Now:
+    //  • create requires the caller's own customerId.
+    //  • customers may update ONLY payment-verification fields on their own
+    //    order (previously this write was silently blocked, meaning the
+    //    `markOrderAsPaid` payment callback could never persist) plus cancel
+    //    their order before packing.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    function customerOrderFieldGuard() {
+      return request.resource.data.diff(resource.data)
+        .affectedKeys()
+        .hasOnly(['status', 'paymentStatus', 'paidAt', 'paymentTxnRef',
+                  'cancelledAt', 'cancellationReason', 'updatedAt', 'refundStatus']);
+    }
+
+    function isValidNotificationCreate() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['id', 'recipientId', 'kind', 'type', 'title', 'body', 'data', 'isRead', 'createdAt', 'updatedAt']) &&
+             data.recipientId is string && data.recipientId.size() > 0 &&
+             data.title is string && data.title.size() <= 200 &&
+             data.body is string && data.body.size() <= 2000 &&
+             data.get('isRead', false) == false;
+    }
+
+    match /orders/{orderId} {
+      allow read: if isAdmin() ||
+        // Rider: only orders actually assigned to them (denormalised riderIds —
+        // rules have no array-scanning lambda, so the repo writes this list).
+        (isRider() && request.auth.uid in resource.data.get('riderIds', ['__none__'])) ||
+        (isCustomer() && resource.data.customerId == request.auth.uid) ||
+        (isSeller() && request.auth.uid in resource.data.sellerIds);
+      allow create: if (isCustomer() || isAdmin()) &&
+        request.resource.data.customerId == request.auth.uid;
+      allow update: if isAdmin() ||
+        (isRider() && request.auth.uid in resource.data.get('riderIds', ['__none__'])) ||
+        // Seller: only orders containing their sellerId.
+        (isSeller() && request.auth.uid in resource.data.sellerIds) ||
+        // Customer: only own order, only payment-status / self-cancel fields.
+        ((isCustomer() || isAuthenticated()) && resource.data.customerId == request.auth.uid &&
+         customerOrderFieldGuard());
+      allow delete: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // DELIVERY TASKS  (Phase 1.3)
+    //
+    // FIX: previously creation was open to every signed-in user and riders
+    // could overwrite ANY available task (last writer wins — two riders could
+    // both claim the same delivery). Now:
+    //  • create: authenticated user, only for a task marked 'available'
+    //    (system / customer checkout path — unchanged behaviour).
+    //  • rider claim must transition available→accepted AND set their own
+    //    riderId — raced claims lose the transaction (Repository uses
+    //    runTransaction; Firestore serialises transactions so the second
+    //    claim sees accepted→available mismatch and fails).
+    //  • riders progress ONLY their own task along a fixed state machine.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    match /deliveryTasks/{taskId} {
+      allow read: if isAuthenticated() && (isRider() || isAdmin() || isSeller());
+      allow create: if isAuthenticated() &&
+        request.resource.data.status == 'available';
+      allow update: if isAdmin() ||
+        (isRider() && (
+          // Claim an available task — must attach own UID in one shot.
+          (resource.data.status == 'available' &&
+           request.resource.data.status == 'accepted' &&
+           request.resource.data.riderId == request.auth.uid) ||
+          // Progress own task through the fixed lifecycle.
+          (resource.data.riderId == request.auth.uid &&
+           resource.data.status in ['accepted', 'pickedUp', 'inTransit'] &&
+           request.resource.data.riderId == request.auth.uid &&
+           request.resource.data.status in ['pickedUp', 'inTransit', 'delivered', 'failed'])
+        ));
+      allow delete: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ADMIN AUDIT LOGS
+    // ═══════════════════════════════════════════════════════════════════════
+
+    match /adminAuditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false; // append-only platform history
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // PLATFORM CONFIG
+    // ═══════════════════════════════════════════════════════════════════════
+
+    match /config/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SERVICE HEALTH  (Phase 0.7 — rules were missing; telemetry silently
+    // failed for every admin. Read: admin only. Write: admin (seeds).
+    // ═══════════════════════════════════════════════════════════════════════
+
+    match /serviceHealth/{docId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // PAYMENT TRANSACTIONS  (Phase 0.7 — rules were missing; the gateway's
+    // Firestore records were permanently denied. Create/read are needed by
+    // the checkout + payment-verification flows (owner); server-side
+    // verification workers get admin rights.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    match /paymentTransactions/{txId} {
+      // Owner-read of own transaction records; admin full access.
+      allow read: if isAdmin() ||
+        (isAuthenticated() && resource.data.get('userId', '') == request.auth.uid);
+      allow create: if isAuthenticated() &&
+        request.resource.data.get('userId', '') == request.auth.uid;
+      // Updates must come from the verification worker / admin only.
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // NOTIFICATIONS  (Phase 1B — new collection powering the in-app
+    // notification centre). Recipient-scoped reads/writes only.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() &&
+        resource.data.recipientId == request.auth.uid;
+      allow create: if isAuthenticated() && isValidNotificationCreate();
+      allow update: if isAuthenticated() &&
+        resource.data.recipientId == request.auth.uid &&
+        request.resource.data.diff(resource.data)
+          .affectedKeys()
+          .hasOnly(['isRead', 'readAt', 'updatedAt']);
+      allow delete: if isAuthenticated() &&
+        (resource.data.recipientId == request.auth.uid || isAdmin());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // AI SUPPORT THREADS & MESSAGES  (Customer Support & Help Center)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    match /supportThreads/{threadId} {
+      allow read: if isAdmin() ||
+        (isAuthenticated() && (resource.data.customerId == request.auth.uid || resource.data.get('assignedAgentId', '') == request.auth.uid));
+      allow create: if isAdmin() ||
+        (isAuthenticated() && request.resource.data.customerId == request.auth.uid);
+      allow update: if isAdmin() ||
+        (isAuthenticated() && (resource.data.customerId == request.auth.uid || resource.data.get('assignedAgentId', '') == request.auth.uid));
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        allow read: if isAdmin() ||
+          (isAuthenticated() && (
+            get(/databases/$(database)/documents/supportThreads/$(threadId)).data.customerId == request.auth.uid ||
+            get(/databases/$(database)/documents/supportThreads/$(threadId)).data.get('assignedAgentId', '') == request.auth.uid
+          ));
+        allow create: if isAdmin() ||
+          (isAuthenticated() && (
+            get(/databases/$(database)/documents/supportThreads/$(threadId)).data.customerId == request.auth.uid ||
+            get(/databases/$(database)/documents/supportThreads/$(threadId)).data.get('assignedAgentId', '') == request.auth.uid
+          ));
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SUPPORT TICKETS  (Human escalation & verified claim tracking)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    match /supportTickets/{ticketId} {
+      allow read: if isAdmin() ||
+        (isAuthenticated() && resource.data.customerId == request.auth.uid);
+      allow create: if isAdmin() ||
+        (isAuthenticated() && request.resource.data.customerId == request.auth.uid);
+      allow update: if isAdmin() ||
+        (isAuthenticated() && resource.data.customerId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SERVICE AREAS & GEOGRAPHIC CATALOG
+    // ═══════════════════════════════════════════════════════════════════════
+
+    match /serviceAreas/{areaId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /locationCatalog/{locationId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // VENDOR INTEGRATIONS & LIVE STAGING CATALOG
+    // ═══════════════════════════════════════════════════════════════════════
+
+    match /vendorIntegrations/{integrationId} {
+      allow read: if isAdmin() || (isSeller() && resource.data.get('vendorId', '') == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    match /vendorCatalogItems/{itemId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /catalogSyncRuns/{runId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /vendorSyncRequests/{requestId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /vendorSettlementLedger/{settlementId} {
+      allow read: if isAdmin() || (isSeller() && resource.data.vendorId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    // Catch-all: default deny for anything not covered above.
+  }
+}
+

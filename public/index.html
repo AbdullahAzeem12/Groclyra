@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Groclyra — Fresh Groceries, Delivered Fast | Lahore, Pakistan</title>
+  <meta name="description" content="Groclyra is Pakistan's online grocery marketplace — fresh produce, bakery, dairy, household items and daily essentials delivered to your doorstep in Lahore. Secure online payments (cards, wallets, bank accounts) plus Cash on Delivery.">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; color: #1a2332; line-height: 1.65; }
+    header { background: #0f766e; color: #fff; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+    header .brand { font-weight: 800; letter-spacing: 2px; font-size: 18px; }
+    nav a { color: #ccfbf1; text-decoration: none; font-size: 14px; margin-left: 18px; font-weight: 600; }
+    nav a:hover { color: #fff; }
+    .hero { background: linear-gradient(135deg, #0f766e 0%, #14b8a6 60%, #34d399 100%); color: #fff; padding: 64px 24px 84px; text-align: center; }
+    .hero h1 { font-size: clamp(30px, 6vw, 50px); margin: 10px 0; font-weight: 800; }
+    .hero p { font-size: clamp(15px, 2.5vw, 18px); opacity: .95; max-width: 660px; margin: 0 auto 26px; }
+    .cta { display: inline-block; background: #fff; color: #0f766e; padding: 12px 32px; border-radius: 999px; font-weight: 700; text-decoration: none; box-shadow: 0 6px 22px rgba(0,0,0,.18); }
+    .section { max-width: 1050px; margin: 0 auto; padding: 54px 24px; }
+    .section h2 { text-align: center; font-size: clamp(22px, 4vw, 30px); margin-bottom: 10px; }
+    .section .sub { text-align: center; color: #5b6b78; font-size: 14.5px; margin-bottom: 30px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 18px; }
+    .card { background: #f6faf9; border: 1px solid #e2efec; border-radius: 14px; padding: 22px; display: flex; flex-direction: column; }
+    .card .emoji { font-size: 30px; margin-bottom: 8px; }
+    .card h3 { font-size: 16.5px; margin-bottom: 6px; color: #0f766e; }
+    .card p { font-size: 13.5px; color: #3d4d5c; flex: 1; }
+    .price { margin-top: 12px; font-weight: 800; color: #134e4a; font-size: 15px; }
+    .old { color: #94a3b8; text-decoration: line-through; font-weight: 500; font-size: 13px; margin-left: 6px; }
+    .paytoggle { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 18px; }
+    .badge { background: #eff6f5; border: 1px solid #cfe5e1; color: #0f766e; padding: 6px 15px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+    .contactbar { background: #10231f; color: #d6e8e4; padding: 40px 24px; }
+    .contactwrap { max-width: 1050px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 22px; }
+    .contactwrap h3 { color: #5eead4; font-size: 16px; margin-bottom: 10px; }
+    .contactwrap p, .contactwrap a { color: #d6e8e4; font-size: 14px; text-decoration: none; display: block; margin-bottom: 4px; }
+    footer { background: #0b1a17; color: #9fb8b2; text-align: center; padding: 22px 16px; font-size: 12.5px; }
+    footer nav a { color: #5eead4; margin: 0 10px; }
+    /* policy pages */
+    .policy { max-width: 860px; margin: 0 auto; padding: 46px 24px 70px; }
+    .policy h1 { color: #0f766e; font-size: 28px; margin-bottom: 6px; }
+    .policy .upd { color: #94a3b8; font-size: 13px; margin-bottom: 26px; }
+    .policy h2 { font-size: 18px; color: #134e4a; margin: 26px 0 8px; }
+    .policy p, .policy li { font-size: 14.5px; color: #37474f; }
+    .policy ul, .policy ol { margin: 8px 0 8px 24px; }
+    .policy table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14px; }
+    .policy th, .policy td { border: 1px solid #d5e5e2; padding: 9px 12px; text-align: left; }
+    .policy th { background: #f0f8f7; color: #0f766e; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════ HOME PAGE ═══════════════════════ -->
+<header>
+  <div class="brand">🌿 GROCLYRA</div>
+  <nav>
+    <a href="#products">Products</a>
+    <a href="privacy.html">Privacy</a>
+    <a href="returns.html">Return & Refund</a>
+    <a href="shipping.html">Shipping</a>
+    <a href="terms.html">Terms</a>
+    <a href="#contact">Contact</a>
+  </nav>
+</header>
+
+<section class="hero">
+  <h1>Fresh Groceries, Delivered Fast.</h1>
+  <p>Groclyra connects customers with trusted local grocery sellers and riders across Lahore —
+     fresh produce, bakery, dairy, pantry and household essentials delivered to your door,
+     with secure online payments or Cash on Delivery.</p>
+  <a class="cta" href="mailto:kheroali66@gmail.com">Contact Us</a>
+</section>
+
+<!-- REQUIREMENT: at least 7–8 products/services listed with prices -->
+<section class="section" id="products">
+  <h2>Our Products & Services</h2>
+  <p class="sub">A sample of what you can order in the Groclyra app — updated daily by our sellers.</p>
+  <div class="grid">
+    <div class="card"><div class="emoji">🥔</div><h3>Fresh Vegetables Basket</h3><p>Hand-picked potatoes, onions, tomatoes, and seasonal sabzi — sorted and weighed fresh each morning.</p><div class="price">Rs. 149 <span class="old">Rs. 199</span></div></div>
+    <div class="card"><div class="emoji">🍎</div><h3>Seasonal Fruits Box</h3><p>Mixed fruit box with apples, bananas, oranges and whatever is best in season this week. 2–3 kg.</p><div class="price">Rs. 349 <span class="old">Rs. 450</span></div></div>
+    <div class="card"><div class="emoji">🥛</div><h3>Dairy & Eggs Pack</h3><p>Fresh milk (1 L), yoghurt (500 g), butter and a tray of 12 farm eggs delivered cold-chain fresh.</p><div class="price">Rs. 399</div></div>
+    <div class="card"><div class="emoji">🍞</div><h3>Bakery Morning Combo</h3><p>Fresh bread, buns, rusk and cake rusk from partner bakeries — baked the same morning.</p><div class="price">Rs. 250</div></div>
+    <div class="card"><div class="emoji">🍚</div><h3>Pantry Essentials Bundle</h3><p>5 kg flour (chakki atta), 1 kg basmati rice, cooking oil (1 L), daal mash and gram flour.</p><div class="price">Rs. 1,299 <span class="old">Rs. 1,550</span></div></div>
+    <div class="card"><div class="emoji">🧴</div><h3>Household & Cleaning Pack</h3><p>Dish soap, floor cleaner, laundry detergent, tissue rolls and garbage bags — one month's supply.</p><div class="price">Rs. 749</div></div>
+    <div class="card"><div class="emoji">🛵</div><h3>Express Grocery Delivery</h3><p>Same-day door-to-door delivery anywhere in Lahore by our vetted riders, with live tracking and OTP-verified handover.</p><div class="price">Rs. 79 flat</div></div>
+    <div class="card"><div class="emoji">🏪</div><h3>Seller Onboarding Service</h3><p>Local grocers join our marketplace with a full inventory dashboard, order fulfilment tools and weekly payouts. Onboarding is free.</p><div class="price">Free</div></div>
+  </div>
+</section>
+
+<section class="section" style="padding-top:0">
+  <h2>Payment Methods We Support</h2>
+  <div class="paytoggle" style="justify-content:center">
+    <span class="badge"> 💳 Debit / Credit Cards (Visa · Master · PayPak)</span>
+    <span class="badge"> 📱 Mobile Wallets (JazzCash · Easypaisa)</span>
+    <span class="badge"> 🏦 Bank Accounts / Raast</span>
+    <span class="badge"> 💵 Cash on Delivery</span>
+  </div>
+</section>
+
+<!-- REQUIREMENT: local office address + contact number -->
+<section class="contactbar" id="contact">
+  <div class="contactwrap">
+    <div>
+      <h3>📍 Office Address</h3>
+      <p><!-- PLACEHOLDER: replace the line below with your exact street address, e.g. "House 12, Street 5, Block C, Model Town, Lahore" -->
+         Office #4, Second Floor, Gulberg III,<br>
+         Lahore, Punjab, Pakistan
+         <!-- PLACEHOLDER end --></p>
+      <p>M–Sat, 10:00 AM – 8:00 PM</p>
+    </div>
+    <div>
+      <h3>📞 Contact</h3>
+      <p>☎️ <a href="tel:+923217649976">+92 321 7649976</a></p>
+      <p>✉️ <a href="mailto:kheroali66@gmail.com">kheroali66@gmail.com</a></p>
+      <p>💬 WhatsApp: <a href="https://wa.me/923217649976">+92 321 7649976</a></p>
+    </div>
+    <div>
+      <h3>🛡️ Policies</h3>
+      <p><a href="privacy.html">Privacy Policy</a></p>
+      <p><a href="returns.html">Return & Refund Policy</a></p>
+      <p><a href="shipping.html">Shipping & Delivery Policy</a></p>
+      <p><a href="terms.html">Terms & Conditions</a></p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  © <span id="yr">2026</span> Groclyra · Lahore, Punjab, Pakistan · Grocery marketplace operated by Abdullah Azeem (Sole Proprietor)
+  <br><nav>
+    <a href="privacy.html">Privacy</a> · <a href="returns.html">Return & Refund</a> · <a href="shipping.html">Shipping</a> · <a href="terms.html">Terms</a>
+  </nav>
+</footer>
+<script>document.getElementById('yr').textContent = new Date().getFullYear();</script>
+
+</body>
+</html>

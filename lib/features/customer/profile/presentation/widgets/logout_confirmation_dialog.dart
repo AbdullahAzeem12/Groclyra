@@ -62,7 +62,7 @@ class LogoutConfirmationDialog extends ConsumerWidget {
             Navigator.pop(context);
             await ref.read(authControllerProvider.notifier).logout();
             if (context.mounted) {
-              context.go(RouteNames.roleSelection);
+              context.go(RouteNames.login);
             }
           },
           child: Container(

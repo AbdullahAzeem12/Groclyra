@@ -7,7 +7,6 @@ import '../features/auth/domain/entities/user_entity.dart';
 import '../features/auth/presentation/controllers/auth_controller.dart';
 import '../features/auth/presentation/screens/splash_screen.dart';
 import '../features/auth/presentation/screens/onboarding_screen.dart';
-import '../features/auth/presentation/screens/role_selection_screen.dart';
 import '../features/auth/presentation/screens/login_screen.dart';
 import '../features/auth/presentation/screens/registration_screen.dart';
 import '../features/auth/presentation/screens/forgot_password_screen.dart';
@@ -121,8 +120,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           loc == RouteNames.unauthorized ||
           loc.startsWith(RouteNames.roleSelectionSwitch);
 
+      if (loc == RouteNames.roleSelection) {
+        return RouteNames.login;
+      }
+
       if (!authState.isAuthenticated) {
-        if (!isAuthRoute) return RouteNames.roleSelection;
+        if (!isAuthRoute) return RouteNames.login;
         return null;
       }
 
@@ -164,7 +167,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: RouteNames.roleSelection,
-        builder: (context, state) => const RoleSelectionScreen(),
+        redirect: (context, state) => RouteNames.login,
       ),
       GoRoute(
         path: RouteNames.login,

@@ -67,7 +67,7 @@ class _SellerDashboardScreenState extends ConsumerState<SellerDashboardScreen> w
           IconButton(
             tooltip: 'Switch Portal',
             icon: const Icon(Icons.swap_horiz_rounded, color: Colors.white),
-            onPressed: () => context.push(RouteNames.roleSelection),
+            onPressed: () => context.push(RouteNames.login),
           ),
         ],
       ),

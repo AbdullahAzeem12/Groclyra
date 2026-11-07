@@ -850,40 +850,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: AppDimensions.p16),
-
-                        // Direct link to Role Selection Overview
-                        Center(
-                          child: TextButton.icon(
-                            onPressed: () {
-                              ref
-                                  .read(authControllerProvider.notifier)
-                                  .clearError();
-                              if (context.canPop()) {
-                                context.pop();
-                              } else {
-                                context.go(RouteNames.roleSelection);
-                              }
-                            },
-                            icon: Icon(
-                              Icons.grid_view_rounded,
-                              size: 15,
-                              color: isDark
-                                  ? const Color(0xFF64748B)
-                                  : const Color(0xFF94A3B8),
-                            ),
-                            label: Text(
-                              'Explore All Portals & Capabilities',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: isDark
-                                    ? const Color(0xFF64748B)
-                                    : const Color(0xFF94A3B8),
-                              ),
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                   ),

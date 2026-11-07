@@ -34,7 +34,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         _navigateByRole(authState.user!.role);
       }
     } else {
-      context.go(RouteNames.onboarding);
+      context.go(RouteNames.login);
     }
   }
 
@@ -63,9 +63,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: BoxDecoration(
-          gradient: themeState.palette.linearGradient,
-        ),
+        decoration: BoxDecoration(gradient: themeState.palette.linearGradient),
         child: SafeArea(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -73,30 +71,30 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
               const Spacer(),
               // App Logo Icon
               Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.2),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                child: Center(
-                  child: Text(
-                    'GL',
-                    style: TextStyle(
-                      fontSize: 38,
-                      fontWeight: FontWeight.w900,
-                      color: themeState.palette.primaryColor,
+                    child: Center(
+                      child: Text(
+                        'GL',
+                        style: TextStyle(
+                          fontSize: 38,
+                          fontWeight: FontWeight.w900,
+                          color: themeState.palette.primaryColor,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              )
+                  )
                   .animate()
                   .scale(duration: 600.ms, curve: Curves.easeOutBack)
                   .fadeIn(duration: 400.ms),

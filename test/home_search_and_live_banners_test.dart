@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:groclyra/shared/widgets/live_promo_banner_carousel.dart';
 import 'package:groclyra/shared/widgets/live_deal_countdown_badge.dart';
 import 'package:groclyra/features/catalog/domain/entities/category_entity.dart';

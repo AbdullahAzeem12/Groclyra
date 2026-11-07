@@ -67,7 +67,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
     final size = MediaQuery.sizeOf(context);
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF090D16) : const Color(0xFFF8FAFC),
+      backgroundColor: isDark
+          ? const Color(0xFF090D16)
+          : const Color(0xFFF8FAFC),
       body: Stack(
         children: [
           // 1. Ultra-Premium Ambient Background Theme (Glow Orbs & Light Mesh)
@@ -79,7 +81,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
               children: [
                 // Top Bar: Brand Logo & Skip Button
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20.0,
+                    vertical: 10.0,
+                  ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -91,10 +96,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
                             height: 32,
                             decoration: BoxDecoration(
                               gradient: palette.linearGradient,
-                              borderRadius: BorderRadius.circular(AppDimensions.radiusSmall),
+                              borderRadius: BorderRadius.circular(
+                                AppDimensions.radiusSmall,
+                              ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: palette.primaryColor.withValues(alpha: 0.4),
+                                  color: palette.primaryColor.withValues(
+                                    alpha: 0.4,
+                                  ),
                                   blurRadius: 10,
                                   offset: const Offset(0, 3),
                                 ),
@@ -127,17 +136,29 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
                       // Skip Button with Touch Feedback
                       Container(
                         decoration: BoxDecoration(
-                          color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.06),
+                          color: (isDark ? Colors.white : Colors.black)
+                              .withValues(alpha: 0.06),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: TextButton(
-                          onPressed: () => context.go(RouteNames.roleSelection),
+                          onPressed: () => context.go(RouteNames.login),
                           style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                            foregroundColor: isDark ? Colors.white70 : Colors.black87,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 6,
+                            ),
+                            foregroundColor: isDark
+                                ? Colors.white70
+                                : Colors.black87,
                             minimumSize: const Size(0, 32),
                           ),
-                          child: const Text('Skip', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          child: const Text(
+                            'Skip',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -161,7 +182,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
                           final isCurrentPage = _currentPage == index;
 
                           return Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24.0,
+                            ),
                             child: Center(
                               child: SingleChildScrollView(
                                 physics: const BouncingScrollPhysics(),
@@ -182,11 +205,17 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
 
                                     // Slide Title (Bold, High Contrast, Anti-Overflow)
                                     AnimatedOpacity(
-                                      duration: const Duration(milliseconds: 350),
+                                      duration: const Duration(
+                                        milliseconds: 350,
+                                      ),
                                       opacity: isCurrentPage ? 1.0 : 0.4,
                                       child: AnimatedSlide(
-                                        duration: const Duration(milliseconds: 350),
-                                        offset: isCurrentPage ? Offset.zero : const Offset(0, 0.08),
+                                        duration: const Duration(
+                                          milliseconds: 350,
+                                        ),
+                                        offset: isCurrentPage
+                                            ? Offset.zero
+                                            : const Offset(0, 0.08),
                                         child: Text(
                                           _pages[index]['title']!,
                                           textAlign: TextAlign.center,
@@ -195,7 +224,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
                                             fontWeight: FontWeight.w900,
                                             letterSpacing: -0.4,
                                             height: 1.25,
-                                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                                            color: isDark
+                                                ? Colors.white
+                                                : const Color(0xFF0F172A),
                                           ),
                                         ),
                                       ),
@@ -205,19 +236,29 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
 
                                     // Slide Subtitle with Refined Line Height
                                     ConstrainedBox(
-                                      constraints: const BoxConstraints(maxWidth: 360),
+                                      constraints: const BoxConstraints(
+                                        maxWidth: 360,
+                                      ),
                                       child: AnimatedOpacity(
-                                        duration: const Duration(milliseconds: 350),
+                                        duration: const Duration(
+                                          milliseconds: 350,
+                                        ),
                                         opacity: isCurrentPage ? 1.0 : 0.4,
                                         child: AnimatedSlide(
-                                          duration: const Duration(milliseconds: 350),
-                                          offset: isCurrentPage ? Offset.zero : const Offset(0, 0.08),
+                                          duration: const Duration(
+                                            milliseconds: 350,
+                                          ),
+                                          offset: isCurrentPage
+                                              ? Offset.zero
+                                              : const Offset(0, 0.08),
                                           child: Text(
                                             _pages[index]['subtitle']!,
                                             textAlign: TextAlign.center,
                                             style: TextStyle(
                                               fontSize: 14.5,
-                                              color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                              color: isDark
+                                                  ? const Color(0xFF94A3B8)
+                                                  : const Color(0xFF64748B),
                                               height: 1.55,
                                               letterSpacing: 0.1,
                                             ),
@@ -241,45 +282,53 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
                 // Indicator Dots (Elongated Active Pill with Glow)
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(
-                    _pages.length,
-                    (index) {
-                      final isActive = _currentPage == index;
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 350),
-                        curve: Curves.easeOutCubic,
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        width: isActive ? 34 : 9,
-                        height: 9,
-                        decoration: BoxDecoration(
-                          gradient: isActive ? palette.linearGradient : null,
-                          color: isActive
-                              ? null
-                              : (isDark ? Colors.white.withValues(alpha: 0.20) : Colors.black.withValues(alpha: 0.15)),
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: isActive
-                              ? [
-                                  BoxShadow(
-                                    color: palette.primaryColor.withValues(alpha: 0.55),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 2),
+                  children: List.generate(_pages.length, (index) {
+                    final isActive = _currentPage == index;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 350),
+                      curve: Curves.easeOutCubic,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      width: isActive ? 34 : 9,
+                      height: 9,
+                      decoration: BoxDecoration(
+                        gradient: isActive ? palette.linearGradient : null,
+                        color: isActive
+                            ? null
+                            : (isDark
+                                  ? Colors.white.withValues(alpha: 0.20)
+                                  : Colors.black.withValues(alpha: 0.15)),
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: isActive
+                            ? [
+                                BoxShadow(
+                                  color: palette.primaryColor.withValues(
+                                    alpha: 0.55,
                                   ),
-                                ]
-                              : null,
-                        ),
-                      );
-                    },
-                  ),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                            : null,
+                      ),
+                    );
+                  }),
                 ),
 
                 const SizedBox(height: 28),
 
                 // Bottom CTA Button (GradientButton with Shimmer & Spring Ripple)
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppDimensions.p24, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppDimensions.p24,
+                    vertical: 12,
+                  ),
                   child: GradientButton(
-                    text: _currentPage == _pages.length - 1 ? 'Get Started' : 'Continue',
-                    icon: _currentPage == _pages.length - 1 ? Icons.rocket_launch_rounded : Icons.arrow_forward_rounded,
+                    text: _currentPage == _pages.length - 1
+                        ? 'Get Started'
+                        : 'Continue',
+                    icon: _currentPage == _pages.length - 1
+                        ? Icons.rocket_launch_rounded
+                        : Icons.arrow_forward_rounded,
                     onPressed: () {
                       if (_currentPage < _pages.length - 1) {
                         _pageController.nextPage(
@@ -287,7 +336,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
                           curve: Curves.easeOutQuint,
                         );
                       } else {
-                        context.go(RouteNames.roleSelection);
+                        context.go(RouteNames.login);
                       }
                     },
                   ),
@@ -302,7 +351,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
   }
 
   /// Ambient Animated Mesh & Glowing Orbs Background
-  Widget _buildAmbientBackground(Size size, AppThemePalette palette, bool isDark) {
+  Widget _buildAmbientBackground(
+    Size size,
+    AppThemePalette palette,
+    bool isDark,
+  ) {
     final primary = palette.primaryColor;
     final secondary = palette.secondaryColor;
     final opacity = isDark ? 0.16 : 0.08;

@@ -85,7 +85,7 @@ class _RiderDashboardScreenState extends ConsumerState<RiderDashboardScreen> wit
           IconButton(
             tooltip: 'Switch Portal',
             icon: const Icon(Icons.swap_horiz_rounded, color: Colors.white),
-            onPressed: () => context.go(RouteNames.roleSelection),
+            onPressed: () => context.go(RouteNames.login),
           ),
         ],
       ),

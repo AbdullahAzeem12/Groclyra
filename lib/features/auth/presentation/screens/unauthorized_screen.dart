@@ -16,7 +16,7 @@ class UnauthorizedScreen extends ConsumerWidget {
         title: const Text('Access Denied'),
         leading: IconButton(
           icon: const Icon(Icons.close_rounded),
-          onPressed: () => context.go(RouteNames.roleSelection),
+          onPressed: () => context.go(RouteNames.login),
         ),
       ),
       body: SafeArea(
@@ -26,10 +26,10 @@ class UnauthorizedScreen extends ConsumerWidget {
             title: '403 Forbidden Access',
             description: 'You do not have permissions to access this portal. Your current role is not authorized for this section of the system.',
             icon: Icons.shield_outlined,
-            actionButtonText: 'Return to Role Selection',
+            actionButtonText: 'Return to Login',
             onAction: () {
               ref.read(authControllerProvider.notifier).logout();
-              context.go(RouteNames.roleSelection);
+              context.go(RouteNames.login);
             },
           ),
         ),

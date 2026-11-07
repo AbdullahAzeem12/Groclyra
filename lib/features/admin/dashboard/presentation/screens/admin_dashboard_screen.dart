@@ -21,7 +21,8 @@ class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
 
   @override
-  ConsumerState<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+  ConsumerState<AdminDashboardScreen> createState() =>
+      _AdminDashboardScreenState();
 }
 
 class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
@@ -58,11 +59,17 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final analytics = adminState.analytics;
 
-    final pendingSellers = adminState.kycQueue.where((k) => !k.isApproved).length;
-    final pendingRiders = adminState.riderKycQueue.where((r) => r.isPending).length;
+    final pendingSellers = adminState.kycQueue
+        .where((k) => !k.isApproved)
+        .length;
+    final pendingRiders = adminState.riderKycQueue
+        .where((r) => r.isPending)
+        .length;
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0B101D) : const Color(0xFFF1F5F9),
+      backgroundColor: isDark
+          ? const Color(0xFF0B101D)
+          : const Color(0xFFF1F5F9),
       appBar: GradientAppBar(
         title: 'Groclyra Admin Console',
         subtitle: 'Platform Governance & Operational Health',
@@ -81,7 +88,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
           IconButton(
             tooltip: 'Switch Portal',
             icon: const Icon(Icons.swap_horiz_rounded, color: Colors.white),
-            onPressed: () => context.go(RouteNames.roleSelection),
+            onPressed: () => context.go(RouteNames.login),
           ),
         ],
       ),
@@ -92,11 +99,15 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
           return ref.read(adminControllerProvider.notifier).loadDashboard();
         },
         child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+          physics: const AlwaysScrollableScrollPhysics(
+            parent: BouncingScrollPhysics(),
+          ),
           slivers: [
             // Error banner
             if (adminState.errorMessage != null)
-              SliverToBoxAdapter(child: _ErrorBanner(message: adminState.errorMessage!)),
+              SliverToBoxAdapter(
+                child: _ErrorBanner(message: adminState.errorMessage!),
+              ),
 
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
@@ -104,20 +115,25 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                 delegate: SliverChildListDelegate([
                   // ── GMV CARD ───────────────────────────────────────────────
                   _GmvCard(
-                    analytics: analytics,
-                    connectionStatus: adminState.connectionStatus,
-                    isInitializing: adminState.isInitializing,
-                    pulseController: _pulseController,
-                    lastSyncLabel: adminState.lastSyncLabel,
-                    isDark: isDark,
-                    themeColor: themeState.palette.primaryColor,
-                  ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.08, end: 0),
+                        analytics: analytics,
+                        connectionStatus: adminState.connectionStatus,
+                        isInitializing: adminState.isInitializing,
+                        pulseController: _pulseController,
+                        lastSyncLabel: adminState.lastSyncLabel,
+                        isDark: isDark,
+                        themeColor: themeState.palette.primaryColor,
+                      )
+                      .animate()
+                      .fadeIn(duration: 400.ms)
+                      .slideY(begin: 0.08, end: 0),
 
                   const SizedBox(height: 14),
 
                   // ── ORDER BREAKDOWN ────────────────────────────────────────
-                  _OrderBreakdownRow(analytics: analytics, isDark: isDark)
-                      .animate().fadeIn(duration: 400.ms, delay: 80.ms),
+                  _OrderBreakdownRow(
+                    analytics: analytics,
+                    isDark: isDark,
+                  ).animate().fadeIn(duration: 400.ms, delay: 80.ms),
 
                   const SizedBox(height: 14),
 
@@ -176,7 +192,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                       Expanded(
                         child: Text(
                           'Pending Approvals & Governance',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 letterSpacing: -0.3,
                               ),
@@ -184,7 +201,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                       ),
                       if (pendingSellers + pendingRiders > 0)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.red.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(12),
@@ -238,7 +258,8 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                     icon: Icons.checklist_rtl_rounded,
                     iconColor: Colors.indigo,
                     title: 'Catalog Product Moderation',
-                    subtitle: '${catalogState.allProducts.length} listings in the catalog',
+                    subtitle:
+                        '${catalogState.allProducts.length} listings in the catalog',
                     badgeCount: 0,
                     onTap: () => context.go(RouteNames.adminCatalog),
                     isDark: isDark,
@@ -255,15 +276,19 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                     badgeCount: 0,
                     onTap: () => context.go(RouteNames.adminTelemetry),
                     isDark: isDark,
-                    trailingWidget: _healthIndicatorDot(adminState.connectionStatus),
+                    trailingWidget: _healthIndicatorDot(
+                      adminState.connectionStatus,
+                    ),
                   ).animate().fadeIn(duration: 400.ms, delay: 410.ms),
 
                   const SizedBox(height: 20),
 
                   // ── LIVE EVENTS PREVIEW ───────────────────────────────────
                   if (adminState.liveEvents.isNotEmpty)
-                    _LiveEventsPreview(events: adminState.liveEvents, isDark: isDark)
-                        .animate().fadeIn(duration: 400.ms, delay: 460.ms),
+                    _LiveEventsPreview(
+                      events: adminState.liveEvents,
+                      isDark: isDark,
+                    ).animate().fadeIn(duration: 400.ms, delay: 460.ms),
 
                   const SizedBox(height: 20),
 
@@ -282,7 +307,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
   }
 
   String _healthSubtitle(AdminState state) {
-    final healthy = state.serviceHealth.where((s) => s.status == ServiceHealthStatus.healthy).length;
+    final healthy = state.serviceHealth
+        .where((s) => s.status == ServiceHealthStatus.healthy)
+        .length;
     final total = state.serviceHealth.length;
     if (total == 0) return 'Backend services monitoring';
     if (healthy == total) return '$total services — all operational';
@@ -291,7 +318,9 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
   }
 
   Widget _healthIndicatorDot(ConnectionStatus status) {
-    final color = status == ConnectionStatus.live ? Colors.greenAccent : Colors.orangeAccent;
+    final color = status == ConnectionStatus.live
+        ? Colors.greenAccent
+        : Colors.orangeAccent;
     return AnimatedBuilder(
       animation: _pulseController,
       builder: (_, __) {
@@ -302,7 +331,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: color.withValues(alpha: opacity),
-            boxShadow: [BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 6, spreadRadius: 2)],
+            boxShadow: [
+              BoxShadow(
+                color: color.withValues(alpha: 0.5),
+                blurRadius: 6,
+                spreadRadius: 2,
+              ),
+            ],
           ),
         );
       },
@@ -383,9 +418,17 @@ class _ConnectionBadge extends StatelessWidget {
               height: 6,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: dotColor.withValues(alpha: 0.6 + 0.4 * pulseController.value),
+                color: dotColor.withValues(
+                  alpha: 0.6 + 0.4 * pulseController.value,
+                ),
                 boxShadow: status == ConnectionStatus.live
-                    ? [BoxShadow(color: dotColor.withValues(alpha: 0.5), blurRadius: 4, spreadRadius: 1)]
+                    ? [
+                        BoxShadow(
+                          color: dotColor.withValues(alpha: 0.5),
+                          blurRadius: 4,
+                          spreadRadius: 1,
+                        ),
+                      ]
                     : null,
               ),
             ),
@@ -393,7 +436,11 @@ class _ConnectionBadge extends StatelessWidget {
           const SizedBox(width: 5),
           Text(
             status.label,
-            style: TextStyle(color: dotColor, fontSize: 10, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: dotColor,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       ),
@@ -434,124 +481,165 @@ class _GmvCard extends StatelessWidget {
     final ordersToday = analytics?.totalOrdersToday;
 
     return GestureDetector(
-      onTap: () => _showRevenueBreakdown(context, gmv, commission, refunds, netRevenue, ordersToday),
+      onTap: () => _showRevenueBreakdown(
+        context,
+        gmv,
+        commission,
+        refunds,
+        netRevenue,
+        ordersToday,
+      ),
       child: Container(
         width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: isDark
-              ? [const Color(0xFF0F172A), const Color(0xFF1A2340)]
-              : [const Color(0xFF1E293B), const Color(0xFF0F172A)],
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? [const Color(0xFF0F172A), const Color(0xFF1A2340)]
+                : [const Color(0xFF1E293B), const Color(0xFF0F172A)],
+          ),
+          borderRadius: BorderRadius.circular(AppDimensions.radiusLarge),
+          border: Border.all(
+            color: themeColor.withValues(alpha: 0.25),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
-        borderRadius: BorderRadius.circular(AppDimensions.radiusLarge),
-        border: Border.all(
-          color: themeColor.withValues(alpha: 0.25),
-          width: 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 16, offset: const Offset(0, 6)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header row
-          // Overflow fix: labels are flexible + ellipsised on narrow screens.
-          Row(
-            children: [
-              const Expanded(
-                child: Text('Total Platform GMV',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header row
+            // Overflow fix: labels are flexible + ellipsised on narrow screens.
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Total Platform GMV',
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: Colors.white60, fontSize: 13, fontWeight: FontWeight.w500)),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Updated: $lastSyncLabel',
-                style: TextStyle(
-                  color: analytics?.isStale == true ? Colors.amberAccent : Colors.white38,
-                  fontSize: 10,
+                    style: TextStyle(
+                      color: Colors.white60,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Updated: $lastSyncLabel',
+                  style: TextStyle(
+                    color: analytics?.isStale == true
+                        ? Colors.amberAccent
+                        : Colors.white38,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+
+            // GMV Value
+            if (isInitializing)
+              _shimmerText(width: 180, height: 36)
+            else
+              _AnimatedCurrencyValue(
+                value: gmv,
+                unavailableText: '— Awaiting data',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 30,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -1,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 10),
 
-          // GMV Value
-          if (isInitializing)
-            _shimmerText(width: 180, height: 36)
-          else
-            _AnimatedCurrencyValue(
-              value: gmv,
-              unavailableText: '— Awaiting data',
-              style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -1),
+            const SizedBox(height: 16),
+
+            // Metrics grid
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                _gmvMetricChip('Commission', commission, Colors.amberAccent),
+                _gmvMetricChip(
+                  'Refunds',
+                  refunds,
+                  Colors.redAccent,
+                  prefix: '-',
+                ),
+                _gmvMetricChip('Net Revenue', netRevenue, Colors.greenAccent),
+                if (avgOrderValue != null)
+                  _gmvMetricChip('Avg Order', avgOrderValue, Colors.blueAccent),
+              ],
             ),
 
-          const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            const Divider(color: Colors.white12),
+            const SizedBox(height: 10),
 
-          // Metrics grid
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _gmvMetricChip('Commission', commission, Colors.amberAccent),
-              _gmvMetricChip('Refunds', refunds, Colors.redAccent, prefix: '-'),
-              _gmvMetricChip('Net Revenue', netRevenue, Colors.greenAccent),
-              if (avgOrderValue != null)
-                _gmvMetricChip('Avg Order', avgOrderValue, Colors.blueAccent),
-            ],
-          ),
-
-          const SizedBox(height: 12),
-          const Divider(color: Colors.white12),
-          const SizedBox(height: 10),
-
-          // Orders today row
-          // Overflow fix: label flexible, status chip stays right-aligned.
-          Row(
-            children: [
-              const Icon(Icons.receipt_long_outlined, color: Colors.white54, size: 16),
-              const SizedBox(width: 8),
-              Expanded(
-                child: isInitializing
-                    ? _shimmerText(width: 120, height: 14)
-                    : Text(
-                        ordersToday == null
-                            ? 'Orders today: — awaiting data'
-                            : '$ordersToday order${ordersToday == 1 ? '' : 's'} today',
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
+            // Orders today row
+            // Overflow fix: label flexible, status chip stays right-aligned.
+            Row(
+              children: [
+                const Icon(
+                  Icons.receipt_long_outlined,
+                  color: Colors.white54,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: isInitializing
+                      ? _shimmerText(width: 120, height: 14)
+                      : Text(
+                          ordersToday == null
+                              ? 'Orders today: — awaiting data'
+                              : '$ordersToday order${ordersToday == 1 ? '' : 's'} today',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
                             color: ordersToday == null
                                 ? Colors.white54
                                 : Colors.white70,
-                            fontSize: 12),
-                      ),
-              ),
-              const Spacer(),
-              // Status indicator
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  color: connectionStatus.isHealthy
-                      ? Colors.green.withValues(alpha: 0.15)
-                      : Colors.orange.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
+                            fontSize: 12,
+                          ),
+                        ),
                 ),
-                child: Text(
-                  connectionStatus.isHealthy ? 'Live' : connectionStatus.label,
-                  style: TextStyle(
-                    color: connectionStatus.isHealthy ? Colors.greenAccent : Colors.orangeAccent,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
+                const Spacer(),
+                // Status indicator
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: connectionStatus.isHealthy
+                        ? Colors.green.withValues(alpha: 0.15)
+                        : Colors.orange.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    connectionStatus.isHealthy
+                        ? 'Live'
+                        : connectionStatus.label,
+                    style: TextStyle(
+                      color: connectionStatus.isHealthy
+                          ? Colors.greenAccent
+                          : Colors.orangeAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ],
-      ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -565,7 +653,7 @@ class _GmvCard extends StatelessWidget {
     int? ordersToday,
   ) {
     if (gmv == null || commission == null) return;
-    
+
     showDialog(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.8),
@@ -587,7 +675,9 @@ class _GmvCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: isDark ? const Color(0xFF1E293B) : Colors.white,
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: themeColor.withValues(alpha: 0.3)),
+                      border: Border.all(
+                        color: themeColor.withValues(alpha: 0.3),
+                      ),
                       boxShadow: [
                         BoxShadow(
                           color: themeColor.withValues(alpha: 0.15),
@@ -599,7 +689,11 @@ class _GmvCard extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.insights_rounded, size: 48, color: themeColor),
+                        Icon(
+                          Icons.insights_rounded,
+                          size: 48,
+                          color: themeColor,
+                        ),
                         const SizedBox(height: 16),
                         Text(
                           'Revenue Mathematical Breakdown',
@@ -619,20 +713,38 @@ class _GmvCard extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 24),
-                        _buildBreakdownRow('Total GMV', gmv, isDark, isPositive: true),
-                        _buildBreakdownRow('Refunds', refunds ?? 0, isDark, isPositive: false),
+                        _buildBreakdownRow(
+                          'Total GMV',
+                          gmv,
+                          isDark,
+                          isPositive: true,
+                        ),
+                        _buildBreakdownRow(
+                          'Refunds',
+                          refunds ?? 0,
+                          isDark,
+                          isPositive: false,
+                        ),
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 8.0),
                           child: Divider(),
                         ),
-                        _buildBreakdownRow('Net GMV', gmv - (refunds ?? 0), isDark, isPositive: true),
+                        _buildBreakdownRow(
+                          'Net GMV',
+                          gmv - (refunds ?? 0),
+                          isDark,
+                          isPositive: true,
+                        ),
                         const SizedBox(height: 12),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
                               'Platform Commission',
-                              style: TextStyle(color: isDark ? Colors.white60 : Colors.black54, fontSize: 13),
+                              style: TextStyle(
+                                color: isDark ? Colors.white60 : Colors.black54,
+                                fontSize: 13,
+                              ),
                             ),
                             Text(
                               '10.0%',
@@ -647,7 +759,13 @@ class _GmvCard extends StatelessWidget {
                           padding: EdgeInsets.symmetric(vertical: 8.0),
                           child: Divider(),
                         ),
-                        _buildBreakdownRow('Net Platform Revenue', netRevenue ?? 0, isDark, isPositive: true, isTotal: true),
+                        _buildBreakdownRow(
+                          'Net Platform Revenue',
+                          netRevenue ?? 0,
+                          isDark,
+                          isPositive: true,
+                          isTotal: true,
+                        ),
                         const SizedBox(height: 24),
                         SizedBox(
                           width: double.infinity,
@@ -655,11 +773,16 @@ class _GmvCard extends StatelessWidget {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: themeColor,
                               foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                             onPressed: () => Navigator.of(ctx).pop(),
-                            child: const Text('Close Details', style: TextStyle(fontWeight: FontWeight.bold)),
+                            child: const Text(
+                              'Close Details',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
                           ),
                         ),
                       ],
@@ -674,7 +797,13 @@ class _GmvCard extends StatelessWidget {
     );
   }
 
-  Widget _buildBreakdownRow(String label, double value, bool isDark, {bool isPositive = true, bool isTotal = false}) {
+  Widget _buildBreakdownRow(
+    String label,
+    double value,
+    bool isDark, {
+    bool isPositive = true,
+    bool isTotal = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Row(
@@ -683,7 +812,9 @@ class _GmvCard extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: isTotal ? (isDark ? Colors.white : Colors.black87) : (isDark ? Colors.white70 : Colors.black87),
+              color: isTotal
+                  ? (isDark ? Colors.white : Colors.black87)
+                  : (isDark ? Colors.white70 : Colors.black87),
               fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
               fontSize: isTotal ? 16 : 14,
             ),
@@ -693,7 +824,9 @@ class _GmvCard extends StatelessWidget {
             style: TextStyle(
               color: isTotal
                   ? Colors.greenAccent
-                  : (isPositive ? (isDark ? Colors.white : Colors.black87) : Colors.redAccent),
+                  : (isPositive
+                        ? (isDark ? Colors.white : Colors.black87)
+                        : Colors.redAccent),
               fontWeight: isTotal ? FontWeight.w900 : FontWeight.w600,
               fontSize: isTotal ? 18 : 14,
             ),
@@ -703,7 +836,12 @@ class _GmvCard extends StatelessWidget {
     );
   }
 
-  Widget _gmvMetricChip(String label, double? value, Color color, {String prefix = ''}) {
+  Widget _gmvMetricChip(
+    String label,
+    double? value,
+    Color color, {
+    String prefix = '',
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -714,14 +852,32 @@ class _GmvCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 9, fontWeight: FontWeight.w600)),
+          Text(
+            label,
+            style: TextStyle(
+              color: color.withValues(alpha: 0.8),
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 2),
           if (value == null)
-            Text('—', style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold))
+            Text(
+              '—',
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            )
           else
             Text(
               '$prefix${CurrencyFormatter.format(value)}',
-              style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
             ),
         ],
       ),
@@ -756,19 +912,50 @@ class _OrderBreakdownRow extends StatelessWidget {
       onTap: () => _showOrdersBreakdown(context, analytics),
       child: Row(
         children: [
-          Expanded(child: _orderChip('Completed', analytics?.ordersCompleted, Colors.green, isDark)),
+          Expanded(
+            child: _orderChip(
+              'Completed',
+              analytics?.ordersCompleted,
+              Colors.green,
+              isDark,
+            ),
+          ),
           const SizedBox(width: 8),
-          Expanded(child: _orderChip('Active', analytics?.ordersActive, Colors.blue, isDark)),
+          Expanded(
+            child: _orderChip(
+              'Active',
+              analytics?.ordersActive,
+              Colors.blue,
+              isDark,
+            ),
+          ),
           const SizedBox(width: 8),
-          Expanded(child: _orderChip('Cancelled', analytics?.ordersCancelled, Colors.red, isDark)),
+          Expanded(
+            child: _orderChip(
+              'Cancelled',
+              analytics?.ordersCancelled,
+              Colors.red,
+              isDark,
+            ),
+          ),
           const SizedBox(width: 8),
-          Expanded(child: _orderChip('Refunded', analytics?.ordersRefunded, Colors.amber, isDark)),
+          Expanded(
+            child: _orderChip(
+              'Refunded',
+              analytics?.ordersRefunded,
+              Colors.amber,
+              isDark,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  void _showOrdersBreakdown(BuildContext context, AdminAnalyticsEntity? analytics) {
+  void _showOrdersBreakdown(
+    BuildContext context,
+    AdminAnalyticsEntity? analytics,
+  ) {
     if (analytics == null) return;
     showDialog(
       context: context,
@@ -791,7 +978,9 @@ class _OrderBreakdownRow extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: isDark ? const Color(0xFF1E293B) : Colors.white,
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                      border: Border.all(
+                        color: Colors.blue.withValues(alpha: 0.3),
+                      ),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.blue.withValues(alpha: 0.15),
@@ -803,7 +992,11 @@ class _OrderBreakdownRow extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.receipt_long_rounded, size: 48, color: Colors.blue),
+                        const Icon(
+                          Icons.receipt_long_rounded,
+                          size: 48,
+                          color: Colors.blue,
+                        ),
                         const SizedBox(height: 16),
                         Text(
                           'Order Lifecycle & Sync',
@@ -823,12 +1016,41 @@ class _OrderBreakdownRow extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 24),
-                        _buildBreakdownRow('Total Orders Today', analytics.totalOrdersToday ?? 0, isDark, isTotal: true, color: Colors.blueAccent),
-                        const Padding(padding: EdgeInsets.symmetric(vertical: 8.0), child: Divider()),
-                        _buildBreakdownRow('Completed', analytics.ordersCompleted ?? 0, isDark, color: Colors.green),
-                        _buildBreakdownRow('Active (In-progress)', analytics.ordersActive ?? 0, isDark, color: Colors.blue),
-                        _buildBreakdownRow('Cancelled', analytics.ordersCancelled ?? 0, isDark, color: Colors.red),
-                        _buildBreakdownRow('Refunded', analytics.ordersRefunded ?? 0, isDark, color: Colors.amber),
+                        _buildBreakdownRow(
+                          'Total Orders Today',
+                          analytics.totalOrdersToday ?? 0,
+                          isDark,
+                          isTotal: true,
+                          color: Colors.blueAccent,
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8.0),
+                          child: Divider(),
+                        ),
+                        _buildBreakdownRow(
+                          'Completed',
+                          analytics.ordersCompleted ?? 0,
+                          isDark,
+                          color: Colors.green,
+                        ),
+                        _buildBreakdownRow(
+                          'Active (In-progress)',
+                          analytics.ordersActive ?? 0,
+                          isDark,
+                          color: Colors.blue,
+                        ),
+                        _buildBreakdownRow(
+                          'Cancelled',
+                          analytics.ordersCancelled ?? 0,
+                          isDark,
+                          color: Colors.red,
+                        ),
+                        _buildBreakdownRow(
+                          'Refunded',
+                          analytics.ordersRefunded ?? 0,
+                          isDark,
+                          color: Colors.amber,
+                        ),
                         const SizedBox(height: 24),
                         SizedBox(
                           width: double.infinity,
@@ -836,11 +1058,16 @@ class _OrderBreakdownRow extends StatelessWidget {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue,
                               foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                             onPressed: () => Navigator.of(ctx).pop(),
-                            child: const Text('Close Details', style: TextStyle(fontWeight: FontWeight.bold)),
+                            child: const Text(
+                              'Close Details',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
                           ),
                         ),
                       ],
@@ -855,7 +1082,13 @@ class _OrderBreakdownRow extends StatelessWidget {
     );
   }
 
-  Widget _buildBreakdownRow(String label, int value, bool isDark, {bool isTotal = false, required Color color}) {
+  Widget _buildBreakdownRow(
+    String label,
+    int value,
+    bool isDark, {
+    bool isTotal = false,
+    required Color color,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Row(
@@ -864,7 +1097,9 @@ class _OrderBreakdownRow extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: isTotal ? (isDark ? Colors.white : Colors.black87) : (isDark ? Colors.white70 : Colors.black87),
+              color: isTotal
+                  ? (isDark ? Colors.white : Colors.black87)
+                  : (isDark ? Colors.white70 : Colors.black87),
               fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
               fontSize: isTotal ? 16 : 14,
             ),
@@ -903,7 +1138,10 @@ class _OrderBreakdownRow extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             label,
-            style: TextStyle(color: isDark ? Colors.white38 : Colors.black38, fontSize: 9),
+            style: TextStyle(
+              color: isDark ? Colors.white38 : Colors.black38,
+              fontSize: 9,
+            ),
             textAlign: TextAlign.center,
           ),
         ],
@@ -944,7 +1182,11 @@ class _StakeholderTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppDimensions.radiusMedium),
         border: Border.all(color: color.withValues(alpha: 0.25), width: 1.1),
         boxShadow: [
-          BoxShadow(color: color.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, 3)),
+          BoxShadow(
+            color: color.withValues(alpha: 0.08),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
         ],
       ),
       child: Column(
@@ -952,18 +1194,52 @@ class _StakeholderTile extends StatelessWidget {
         children: [
           Container(
             padding: const EdgeInsets.all(7),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
             child: Icon(icon, color: color, size: 18),
           ),
           const SizedBox(height: 8),
           total == null
-              ? Text('—', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: color))
-              : Text('$total', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: color)),
+              ? Text(
+                  '—',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 18,
+                    color: color,
+                  ),
+                )
+              : Text(
+                  '$total',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 18,
+                    color: color,
+                  ),
+                ),
           const SizedBox(height: 2),
-          Text(label, style: TextStyle(fontSize: 10, color: isDark ? Colors.white54 : Colors.black45, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              color: isDark ? Colors.white54 : Colors.black45,
+              fontWeight: FontWeight.w600,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           if (subtitle != null) ...[
             const SizedBox(height: 1),
-            Text(subtitle!, style: TextStyle(fontSize: 9, color: color.withValues(alpha: 0.7)), maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(
+              subtitle!,
+              style: TextStyle(
+                fontSize: 9,
+                color: color.withValues(alpha: 0.7),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ],
         ],
       ),
@@ -1033,8 +1309,18 @@ class _GovernanceCard extends ConsumerWidget {
                   right: -4,
                   child: Container(
                     padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                    child: Text('$badgeCount', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      '$badgeCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
             ],
@@ -1044,13 +1330,31 @@ class _GovernanceCard extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 2),
-                Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(
+                  subtitle,
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
           ),
-          trailingWidget ?? const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
+          trailingWidget ??
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: Colors.grey,
+              ),
         ],
       ),
     );
@@ -1076,16 +1380,31 @@ class _LiveEventsPreview extends StatelessWidget {
         Row(
           children: [
             Container(
-              width: 7, height: 7,
-              decoration: const BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle),
+              width: 7,
+              height: 7,
+              decoration: const BoxDecoration(
+                color: Colors.greenAccent,
+                shape: BoxShape.circle,
+              ),
             ),
             const SizedBox(width: 7),
-            Text('Live Event Feed', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              'Live Event Feed',
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(width: 6),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
-              child: Text('${events.length} events', style: const TextStyle(color: Colors.greenAccent, fontSize: 10)),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '${events.length} events',
+                style: const TextStyle(color: Colors.greenAccent, fontSize: 10),
+              ),
             ),
           ],
         ),
@@ -1095,38 +1414,72 @@ class _LiveEventsPreview extends StatelessWidget {
           final icon = _eventIcon(event.type);
           final color = _eventColor(event.type);
           final diff = DateTime.now().difference(event.timestamp);
-          final timeLabel = diff.inSeconds < 60 ? '${diff.inSeconds}s ago' : '${diff.inMinutes}m ago';
+          final timeLabel = diff.inSeconds < 60
+              ? '${diff.inSeconds}s ago'
+              : '${diff.inMinutes}m ago';
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF121722) : Colors.white,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: color.withValues(alpha: 0.2)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(color: color.withValues(alpha: 0.12), shape: BoxShape.circle),
-                    child: Icon(icon, size: 14, color: color),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(_formatEventType(event.type), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                        if (event.targetId != null)
-                          Text('ID: ${event.targetId}', style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : Colors.black38), maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ],
-                    ),
-                  ),
-                  Text(timeLabel, style: TextStyle(fontSize: 10, color: isDark ? Colors.white38 : Colors.black38)),
-                ],
-              ),
-            ).animate().fadeIn(delay: (e.key * 60).ms).slideX(begin: 0.05, end: 0),
+            child:
+                Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF121722) : Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: color.withValues(alpha: 0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.12),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(icon, size: 14, color: color),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _formatEventType(event.type),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                if (event.targetId != null)
+                                  Text(
+                                    'ID: ${event.targetId}',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: isDark
+                                          ? Colors.white38
+                                          : Colors.black38,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            timeLabel,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: isDark ? Colors.white38 : Colors.black38,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                    .animate()
+                    .fadeIn(delay: (e.key * 60).ms)
+                    .slideX(begin: 0.05, end: 0),
           );
         }),
       ],
@@ -1138,7 +1491,8 @@ class _LiveEventsPreview extends StatelessWidget {
     if (type.contains('SELLER')) return Icons.storefront;
     if (type.contains('RIDER')) return Icons.two_wheeler;
     if (type.contains('PAYMENT')) return Icons.payments;
-    if (type.contains('PRODUCT') || type.contains('CATALOG')) return Icons.inventory;
+    if (type.contains('PRODUCT') || type.contains('CATALOG'))
+      return Icons.inventory;
     if (type.contains('KYC')) return Icons.verified_user;
     return Icons.notifications;
   }
@@ -1153,10 +1507,15 @@ class _LiveEventsPreview extends StatelessWidget {
   }
 
   String _formatEventType(String type) {
-    return type.replaceAll('_', ' ').toLowerCase().split(' ').map((w) {
-      if (w.isEmpty) return w;
-      return w[0].toUpperCase() + w.substring(1);
-    }).join(' ');
+    return type
+        .replaceAll('_', ' ')
+        .toLowerCase()
+        .split(' ')
+        .map((w) {
+          if (w.isEmpty) return w;
+          return w[0].toUpperCase() + w.substring(1);
+        })
+        .join(' ');
   }
 }
 
@@ -1176,13 +1535,17 @@ class _SyncFooter extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Icon(
-          status.isHealthy ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
+          status.isHealthy
+              ? Icons.cloud_done_outlined
+              : Icons.cloud_off_outlined,
           size: 13,
           color: Colors.grey,
         ),
         const SizedBox(width: 6),
         Text(
-          status.isHealthy ? 'Last synced: $lastSyncLabel' : 'Data unavailable — ${status.label}',
+          status.isHealthy
+              ? 'Last synced: $lastSyncLabel'
+              : 'Data unavailable — ${status.label}',
           style: const TextStyle(fontSize: 11, color: Colors.grey),
         ),
       ],
@@ -1210,13 +1573,19 @@ class _ErrorBanner extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 18),
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: Colors.redAccent,
+            size: 18,
+          ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(message,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis),
+            child: Text(
+              message,
+              style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -1242,12 +1611,15 @@ class _AnimatedCurrencyValue extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (value == null) {
-      return Text(unavailableText, style: style.copyWith(color: Colors.white38, fontSize: 18));
+      return Text(
+        unavailableText,
+        style: style.copyWith(color: Colors.white38, fontSize: 18),
+      );
     }
-    return Text(
-      CurrencyFormatter.format(value!),
-      style: style,
-    ).animate(key: ValueKey(value!.toInt())).fadeIn(duration: 600.ms).slideY(begin: 0.15, end: 0);
+    return Text(CurrencyFormatter.format(value!), style: style)
+        .animate(key: ValueKey(value!.toInt()))
+        .fadeIn(duration: 600.ms)
+        .slideY(begin: 0.15, end: 0);
   }
 }
 
@@ -1288,7 +1660,12 @@ class _ConnectionHealthDialog extends ConsumerWidget {
           color: isDark ? const Color(0xFF1E293B) : Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 40)],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 40,
+            ),
+          ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1302,14 +1679,30 @@ class _ConnectionHealthDialog extends ConsumerWidget {
                     color: statusColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(Icons.cloud_sync_outlined, color: statusColor, size: 22),
+                  child: Icon(
+                    Icons.cloud_sync_outlined,
+                    color: statusColor,
+                    size: 22,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Connection Health', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    Text('Groclyra Platform', style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.black45)),
+                    const Text(
+                      'Connection Health',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    Text(
+                      'Groclyra Platform',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.white54 : Colors.black45,
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -1319,9 +1712,23 @@ class _ConnectionHealthDialog extends ConsumerWidget {
             const SizedBox(height: 14),
             _infoRow('Status', state.connectionStatus.label, statusColor),
             _infoRow('Last Sync', state.lastSyncLabel, Colors.white70),
-            _infoRow('Firestore', state.connectionStatus.isHealthy ? 'Connected' : 'Error', state.connectionStatus.isHealthy ? Colors.greenAccent : Colors.redAccent),
-            _infoRow('Live Events', '${state.liveEvents.length} received', Colors.white70),
-            _infoRow('KYC Queue', 'Seller: ${state.kycQueue.length}  Rider: ${state.riderKycQueue.length}', Colors.white70),
+            _infoRow(
+              'Firestore',
+              state.connectionStatus.isHealthy ? 'Connected' : 'Error',
+              state.connectionStatus.isHealthy
+                  ? Colors.greenAccent
+                  : Colors.redAccent,
+            ),
+            _infoRow(
+              'Live Events',
+              '${state.liveEvents.length} received',
+              Colors.white70,
+            ),
+            _infoRow(
+              'KYC Queue',
+              'Seller: ${state.kycQueue.length}  Rider: ${state.riderKycQueue.length}',
+              Colors.white70,
+            ),
             if (state.errorMessage != null) ...[
               const SizedBox(height: 8),
               Container(
@@ -1330,7 +1737,10 @@ class _ConnectionHealthDialog extends ConsumerWidget {
                   color: Colors.red.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(state.errorMessage!, style: const TextStyle(color: Colors.redAccent, fontSize: 11)),
+                child: Text(
+                  state.errorMessage!,
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 11),
+                ),
               ),
             ],
             const SizedBox(height: 20),
@@ -1339,7 +1749,10 @@ class _ConnectionHealthDialog extends ConsumerWidget {
                 Expanded(
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(foregroundColor: Colors.white54, side: const BorderSide(color: Colors.white24)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white54,
+                      side: const BorderSide(color: Colors.white24),
+                    ),
                     child: const Text('Close'),
                   ),
                 ),
@@ -1349,9 +1762,13 @@ class _ConnectionHealthDialog extends ConsumerWidget {
                     onPressed: () {
                       HapticFeedback.mediumImpact();
                       Navigator.pop(context);
-                      ref.read(adminControllerProvider.notifier).loadDashboard();
+                      ref
+                          .read(adminControllerProvider.notifier)
+                          .loadDashboard();
                     },
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF3B82F6)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF3B82F6),
+                    ),
                     child: const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -1376,8 +1793,18 @@ class _ConnectionHealthDialog extends ConsumerWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(fontSize: 13, color: Colors.white54)),
-          Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: valueColor)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 13, color: Colors.white54),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: valueColor,
+            ),
+          ),
         ],
       ),
     );

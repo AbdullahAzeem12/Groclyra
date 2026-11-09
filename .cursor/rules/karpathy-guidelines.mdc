@@ -1,0 +1,13 @@
+---
+description: Karpathy Coding Guidelines for AI Coding Assistants
+globs: *
+alwaysApply: true
+---
+
+# Karpathy Coding Guidelines
+
+Follow the 4 core principles inspired by Andrej Karpathy:
+1. **Think Before Coding**: State assumptions explicitly, do not hide confusion, surface tradeoffs.
+2. **Simplicity First**: Write the minimum viable code necessary; avoid speculative complexity.
+3. **Surgical Changes**: Touch only what is strictly requested; zero collateral damage; preserve comments and unrelated logic.
+4. **Goal-Driven Execution**: Define concrete verification steps; ensure 100% test pass rate (`flutter test`) and 0 static analysis errors (`flutter analyze`).

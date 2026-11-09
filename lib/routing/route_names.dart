@@ -29,6 +29,9 @@ class RouteNames {
   static const String customerWishlist = '/customer/wishlist';
   static const String customerNotifications = '/customer/notifications';
   static const String customerSupport = '/customer/support';
+  static const String security2fa = '/customer/security/2fa';
+  static const String deviceSessions = '/customer/security/sessions';
+  static const String databaseBackup = '/customer/security/backup';
 
   // Seller Shell
   static const String sellerDashboard = '/seller';

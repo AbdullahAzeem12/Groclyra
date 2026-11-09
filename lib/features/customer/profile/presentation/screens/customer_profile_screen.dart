@@ -247,7 +247,34 @@ class CustomerProfileScreen extends ConsumerWidget {
               onTap: () => context.push(RouteNames.customerSupport),
             ),
 
-            // 7. Log Out
+            // 7. Two-Factor Authentication (2FA)
+            _buildSettingsTile(
+              context: context,
+              icon: Icons.security_rounded,
+              title: 'Two-Factor Authentication (2FA)',
+              subtitle: 'RFC 6238 TOTP Authenticator & Backup Codes',
+              onTap: () => context.push(RouteNames.security2fa),
+            ),
+
+            // 8. Active Device Sessions
+            _buildSettingsTile(
+              context: context,
+              icon: Icons.devices_rounded,
+              title: 'Active Device Sessions',
+              subtitle: 'Multi-device tracking & remote revocation',
+              onTap: () => context.push(RouteNames.deviceSessions),
+            ),
+
+            // 9. Database Backup & Encrypted Export
+            _buildSettingsTile(
+              context: context,
+              icon: Icons.save_alt_rounded,
+              title: 'Database Backup & Recovery',
+              subtitle: 'AES-256 encrypted SQLite snapshot & export',
+              onTap: () => context.push(RouteNames.databaseBackup),
+            ),
+
+            // 10. Log Out
             _buildSettingsTile(
               context: context,
               icon: Icons.logout_rounded,

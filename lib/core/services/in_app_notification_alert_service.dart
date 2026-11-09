@@ -11,7 +11,8 @@ import 'package:groclyra/routing/route_names.dart';
 /// and animated floating in-app notification alerts for Groclyra.
 class InAppNotificationAlertService {
   InAppNotificationAlertService._();
-  static final InAppNotificationAlertService instance = InAppNotificationAlertService._();
+  static final InAppNotificationAlertService instance =
+      InAppNotificationAlertService._();
 
   FlutterTts? _flutterTts;
   final Set<String> _seenNotificationIds = {};
@@ -41,20 +42,24 @@ class InAppNotificationAlertService {
     _notifSub?.cancel();
 
     // Prime seen set with existing notifications so initial fetch doesn't trigger alarms
-    AppDatabase.instance.query(
-      'notifications',
-      where: 'recipientId = ?',
-      whereArgs: [userId],
-      orderBy: 'createdAt DESC',
-      limit: 30,
-    ).then((existing) {
-      for (final row in existing) {
-        final id = row['id']?.toString();
-        if (id != null) _seenNotificationIds.add(id);
-      }
-    });
+    AppDatabase.instance
+        .query(
+          'notifications',
+          where: 'recipientId = ?',
+          whereArgs: [userId],
+          orderBy: 'createdAt DESC',
+          limit: 30,
+        )
+        .then((existing) {
+          for (final row in existing) {
+            final id = row['id']?.toString();
+            if (id != null) _seenNotificationIds.add(id);
+          }
+        });
 
-    _notifSub = AppDatabase.instance.watchTable('notifications').listen((_) async {
+    _notifSub = AppDatabase.instance.watchTable('notifications').listen((
+      _,
+    ) async {
       try {
         final rows = await AppDatabase.instance.query(
           'notifications',
@@ -101,11 +106,18 @@ class InAppNotificationAlertService {
     } catch (_) {}
 
     // 2. TTS Voice Prompt for delivery milestones
-    if (kind == 'outForDelivery' || title.toLowerCase().contains('out for delivery')) {
-      _speakVoice('Groclyra Express: Your package is out for delivery with our rider!');
-    } else if (kind == 'delivered' || title.toLowerCase().contains('delivered')) {
-      _speakVoice('Your Groclyra delivery is complete. Thank you for ordering!');
-    } else if (kind == 'pickedUp' || title.toLowerCase().contains('picked up')) {
+    if (kind == 'outForDelivery' ||
+        title.toLowerCase().contains('out for delivery')) {
+      _speakVoice(
+        'Groclyra Express: Your package is out for delivery with our rider!',
+      );
+    } else if (kind == 'delivered' ||
+        title.toLowerCase().contains('delivered')) {
+      _speakVoice(
+        'Your Groclyra delivery is complete. Thank you for ordering!',
+      );
+    } else if (kind == 'pickedUp' ||
+        title.toLowerCase().contains('picked up')) {
       _speakVoice('Your order has been picked up from the merchant.');
     }
 
@@ -143,16 +155,23 @@ class InAppNotificationAlertService {
     if (overlay == null) return;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isDelivered = kind == 'delivered' || title.toLowerCase().contains('delivered');
-    final isOutForDelivery = kind == 'outForDelivery' || title.toLowerCase().contains('out for delivery');
+    final isDelivered =
+        kind == 'delivered' || title.toLowerCase().contains('delivered');
+    final isOutForDelivery =
+        kind == 'outForDelivery' ||
+        title.toLowerCase().contains('out for delivery');
 
     final Color bannerColor = isDelivered
         ? const Color(0xFF10B981)
-        : (isOutForDelivery ? const Color(0xFFF59E0B) : const Color(0xFF6366F1));
+        : (isOutForDelivery
+              ? const Color(0xFFF59E0B)
+              : const Color(0xFF6366F1));
 
     final IconData bannerIcon = isDelivered
         ? Icons.check_circle_rounded
-        : (isOutForDelivery ? Icons.two_wheeler_rounded : Icons.notifications_active_rounded);
+        : (isOutForDelivery
+              ? Icons.two_wheeler_rounded
+              : Icons.notifications_active_rounded);
 
     _currentBannerOverlay = OverlayEntry(
       builder: (ctx) {
@@ -177,7 +196,10 @@ class InAppNotificationAlertService {
                 decoration: BoxDecoration(
                   color: isDark ? const Color(0xFF161C26) : Colors.white,
                   borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: bannerColor.withValues(alpha: 0.5), width: 1.5),
+                  border: Border.all(
+                    color: bannerColor.withValues(alpha: 0.5),
+                    width: 1.5,
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: bannerColor.withValues(alpha: 0.25),
@@ -206,14 +228,20 @@ class InAppNotificationAlertService {
                             title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13.5,
+                            ),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             body,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 11.5, color: Colors.grey),
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              color: Colors.grey,
+                            ),
                           ),
                         ],
                       ),
@@ -230,7 +258,10 @@ class InAppNotificationAlertService {
                         }
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: bannerColor,
                           borderRadius: BorderRadius.circular(10),
@@ -271,6 +302,7 @@ class InAppNotificationAlertService {
   }
 }
 
-final inAppNotificationAlertServiceProvider = Provider<InAppNotificationAlertService>((ref) {
-  return InAppNotificationAlertService.instance;
-});
+final inAppNotificationAlertServiceProvider =
+    Provider<InAppNotificationAlertService>((ref) {
+      return InAppNotificationAlertService.instance;
+    });

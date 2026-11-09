@@ -14,6 +14,7 @@ import '../../domain/entities/account_status.dart';
 import '../../domain/entities/auth_result.dart';
 import '../../domain/entities/rider_location.dart';
 import '../../domain/entities/user_entity.dart';
+import '../../../../core/security/totp_service.dart';
 import 'firestore_user_repository.dart';
 
 /// Pure SQLite Authentication Repository for Groclyra.
@@ -206,6 +207,18 @@ class AuthRepository {
         return AuthResult.disabled(userEntity);
       }
 
+      // 4.5. TWO-FACTOR AUTHENTICATION CHECK (RFC 6238 TOTP)
+      final twoFactorRecord = await AppDatabase.instance.query(
+        'user_2fa',
+        where: 'userId = ? AND isEnabled = 1',
+        whereArgs: [userEntity.id],
+        limit: 1,
+      );
+      if (twoFactorRecord.isNotEmpty) {
+        await _rateLimitService.resetFailedLogins(cleanInput);
+        return AuthResult.twoFactorRequired(userEntity);
+      }
+
       // 5. SUCCESS: Persist session, save tokens, update online status
       await _rateLimitService.resetFailedLogins(cleanInput);
       final token = 'tok_${DateTime.now().millisecondsSinceEpoch}_${userEntity.id}';
@@ -221,6 +234,42 @@ class AuthRepository {
     } catch (e) {
       debugPrint('[AuthRepository] Login error: $e');
       return AuthResult.failure('Authentication error: $e');
+    }
+  }
+
+  /// Completes user authentication after successful 2FA TOTP or backup code verification
+  Future<AuthResult> completeTwoFactorLogin({
+    required UserEntity userEntity,
+    required String code,
+  }) async {
+    try {
+      final twoFactorService = TwoFactorAuthService();
+      final isValid = await twoFactorService.verifyLoginCode(
+        userId: userEntity.id,
+        code: code,
+      );
+
+      if (!isValid) {
+        return AuthResult.failure(
+          'Invalid verification code. Please check your Authenticator app or try a backup recovery code.',
+          errorCode: 'invalid-totp-code',
+        );
+      }
+
+      // Success: Persist session, save tokens, update online status
+      final token = 'tok_2fa_${DateTime.now().millisecondsSinceEpoch}_${userEntity.id}';
+      await _secureStorage.saveTokens(token: token, refreshToken: 'refresh_$token');
+      await _persistUserLocally(userEntity);
+
+      _currentUser = userEntity;
+      AppDatabase.instance.activeSessionUserId = userEntity.id;
+      await _firestoreRepo.updateUser(userEntity.id, {'isOnline': 1});
+
+      _authStateController.add(userEntity);
+      return AuthResult.success(userEntity);
+    } catch (e) {
+      debugPrint('[AuthRepository] 2FA verification error: $e');
+      return AuthResult.failure('Two-factor verification failed: $e');
     }
   }
 

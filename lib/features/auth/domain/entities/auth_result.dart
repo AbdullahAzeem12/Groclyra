@@ -3,6 +3,7 @@ import 'user_entity.dart';
 enum AuthResultStatus {
   success,
   emailVerificationRequired,
+  twoFactorRequired,
   pendingApproval,
   suspended,
   disabled,
@@ -33,12 +34,21 @@ class AuthResult {
   bool get isPendingApproval => status == AuthResultStatus.pendingApproval;
   bool get requiresEmailVerification =>
       status == AuthResultStatus.emailVerificationRequired;
+  bool get requiresTwoFactor => status == AuthResultStatus.twoFactorRequired;
 
   factory AuthResult.success(UserEntity user, {String? message}) {
     return AuthResult(
       status: AuthResultStatus.success,
       user: user,
       message: message ?? 'Authentication successful',
+    );
+  }
+
+  factory AuthResult.twoFactorRequired(UserEntity user, {String? message}) {
+    return AuthResult(
+      status: AuthResultStatus.twoFactorRequired,
+      user: user,
+      message: message ?? 'Please enter the 6-digit code from your authenticator app.',
     );
   }
 

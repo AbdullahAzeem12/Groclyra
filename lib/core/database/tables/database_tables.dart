@@ -337,3 +337,37 @@ abstract class OfflineMutationsTable {
   static const String colStatus = 'status';
   static const String colCreatedAt = 'createdAt';
 }
+
+abstract class User2faTable {
+  static const String tableName = 'user_2fa';
+  static const String colUserId = 'userId';
+  static const String colSecretKey = 'secretKey';
+  static const String colIsEnabled = 'isEnabled';
+  static const String colBackupCodesJson = 'backupCodesJson';
+  static const String colCreatedAt = 'createdAt';
+  static const String colUpdatedAt = 'updatedAt';
+}
+
+abstract class UserSessionsTable {
+  static const String tableName = 'user_sessions';
+  static const String colId = 'id';
+  static const String colUserId = 'userId';
+  static const String colDeviceId = 'deviceId';
+  static const String colDeviceName = 'deviceName';
+  static const String colPlatform = 'platform';
+  static const String colIpAddress = 'ipAddress';
+  static const String colLastActiveAt = 'lastActiveAt';
+  static const String colIsCurrent = 'isCurrent';
+  static const String colCreatedAt = 'createdAt';
+}
+
+abstract class DatabaseBackupsTable {
+  static const String tableName = 'database_backups';
+  static const String colId = 'id';
+  static const String colFileName = 'fileName';
+  static const String colFilePath = 'filePath';
+  static const String colFileSizeBytes = 'fileSizeBytes';
+  static const String colChecksum = 'checksum';
+  static const String colIsEncrypted = 'isEncrypted';
+  static const String colCreatedAt = 'createdAt';
+}

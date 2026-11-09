@@ -39,6 +39,7 @@ class AuthState {
   bool get isRoleMismatch => status == AuthResultStatus.roleMismatch;
   bool get requiresEmailVerification =>
       status == AuthResultStatus.emailVerificationRequired;
+  bool get requiresTwoFactor => status == AuthResultStatus.twoFactorRequired;
 
   AuthState copyWith({
     UserEntity? user,
@@ -196,6 +197,15 @@ class AuthController extends StateNotifier<AuthState> {
         errorMessage: result.message,
         lastResult: result,
       );
+    } else if (result.requiresTwoFactor) {
+      state = state.copyWith(
+        user: result.user,
+        isLoading: false,
+        status: AuthResultStatus.twoFactorRequired,
+        errorMessage: null,
+        successMessage: result.message,
+        lastResult: result,
+      );
     } else if (result.isPendingApproval) {
       state = state.copyWith(
         user: result.user,
@@ -208,6 +218,39 @@ class AuthController extends StateNotifier<AuthState> {
       state = state.copyWith(
         isLoading: false,
         status: result.status,
+        errorMessage: result.message,
+        lastResult: result,
+      );
+    }
+
+    return result;
+  }
+
+  /// Verifies the 6-digit TOTP code or backup code for 2FA-protected accounts
+  Future<AuthResult> submitTwoFactorCode(String code) async {
+    final pendingUser = state.user ?? state.lastResult?.user;
+    if (pendingUser == null) {
+      return AuthResult.failure('No pending login session found.');
+    }
+
+    state = state.copyWith(isLoading: true, clearError: true);
+    final result = await _repository.completeTwoFactorLogin(
+      userEntity: pendingUser,
+      code: code,
+    );
+
+    if (result.isSuccess) {
+      state = state.copyWith(
+        user: result.user,
+        isLoading: false,
+        status: AuthResultStatus.success,
+        successMessage: 'Two-factor verification confirmed ✓',
+        lastResult: result,
+      );
+    } else {
+      state = state.copyWith(
+        isLoading: false,
+        status: AuthResultStatus.twoFactorRequired,
         errorMessage: result.message,
         lastResult: result,
       );
@@ -264,6 +307,15 @@ class AuthController extends StateNotifier<AuthState> {
         successMessage: result.message,
         lastResult: result,
       );
+    } else if (result.requiresTwoFactor) {
+      state = state.copyWith(
+        user: result.user,
+        isLoading: false,
+        status: AuthResultStatus.twoFactorRequired,
+        errorMessage: null,
+        successMessage: result.message,
+        lastResult: result,
+      );
     } else if (result.isPendingApproval) {
       state = state.copyWith(
         user: result.user,
@@ -308,6 +360,15 @@ class AuthController extends StateNotifier<AuthState> {
         status: AuthResultStatus.roleMismatch,
         actualRole: result.actualRole,
         errorMessage: result.message,
+        lastResult: result,
+      );
+    } else if (result.requiresTwoFactor) {
+      state = state.copyWith(
+        user: result.user,
+        isLoading: false,
+        status: AuthResultStatus.twoFactorRequired,
+        errorMessage: null,
+        successMessage: result.message,
         lastResult: result,
       );
     } else if (result.isPendingApproval) {
@@ -447,6 +508,15 @@ class AuthController extends StateNotifier<AuthState> {
         errorMessage: result.message,
         lastResult: result,
       );
+    } else if (result.requiresTwoFactor) {
+      state = state.copyWith(
+        user: result.user,
+        isLoading: false,
+        status: AuthResultStatus.twoFactorRequired,
+        errorMessage: null,
+        successMessage: result.message,
+        lastResult: result,
+      );
     } else if (result.isPendingApproval) {
       state = state.copyWith(
         user: result.user,
@@ -501,6 +571,15 @@ class AuthController extends StateNotifier<AuthState> {
         status: AuthResultStatus.roleMismatch,
         actualRole: result.actualRole,
         errorMessage: result.message,
+        lastResult: result,
+      );
+    } else if (result.requiresTwoFactor) {
+      state = state.copyWith(
+        user: result.user,
+        isLoading: false,
+        status: AuthResultStatus.twoFactorRequired,
+        errorMessage: null,
+        successMessage: result.message,
         lastResult: result,
       );
     } else if (result.isPendingApproval) {

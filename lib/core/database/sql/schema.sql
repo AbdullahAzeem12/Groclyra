@@ -400,6 +400,45 @@ CREATE TABLE IF NOT EXISTS offline_mutations (
     createdAt TEXT NOT NULL
 );
 
+-- 24. TWO-FACTOR AUTHENTICATION (RFC 6238 TOTP) TABLE
+CREATE TABLE IF NOT EXISTS user_2fa (
+    userId TEXT PRIMARY KEY NOT NULL,
+    secretKey TEXT NOT NULL,
+    isEnabled INTEGER DEFAULT 0,
+    backupCodesJson TEXT,
+    createdAt TEXT NOT NULL,
+    updatedAt TEXT NOT NULL,
+    FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- 25. ACTIVE USER SESSIONS & DEVICE MANAGEMENT TABLE
+CREATE TABLE IF NOT EXISTS user_sessions (
+    id TEXT PRIMARY KEY NOT NULL,
+    userId TEXT NOT NULL,
+    deviceId TEXT NOT NULL,
+    deviceName TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    ipAddress TEXT,
+    lastActiveAt TEXT NOT NULL,
+    isCurrent INTEGER DEFAULT 0,
+    createdAt TEXT NOT NULL,
+    FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(userId);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_device ON user_sessions(deviceId);
+
+-- 26. DATABASE BACKUP SNAPSHOTS & RECOVERY REGISTRY TABLE
+CREATE TABLE IF NOT EXISTS database_backups (
+    id TEXT PRIMARY KEY NOT NULL,
+    fileName TEXT NOT NULL,
+    filePath TEXT NOT NULL,
+    fileSizeBytes INTEGER NOT NULL,
+    checksum TEXT NOT NULL,
+    isEncrypted INTEGER DEFAULT 1,
+    createdAt TEXT NOT NULL
+);
+
 -- ==============================================================================
 -- AUTOMATIC TIMESTAMP & INTEGRITY TRIGGERS
 -- ==============================================================================

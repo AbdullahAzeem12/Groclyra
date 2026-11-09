@@ -38,6 +38,9 @@ import '../features/customer/addresses/domain/entities/delivery_address_entity.d
 import '../features/customer/wishlist/presentation/screens/wishlist_screen.dart';
 import '../features/customer/notifications/presentation/screens/notification_center_screen.dart';
 import '../features/customer/support/presentation/screens/ai_customer_support_screen.dart';
+import '../features/customer/profile/presentation/screens/two_factor_settings_screen.dart';
+import '../features/customer/profile/presentation/screens/device_sessions_screen.dart';
+import '../features/customer/profile/presentation/screens/database_backup_screen.dart';
 
 // Seller Screens
 import '../features/seller/seller_shell_screen.dart';
@@ -310,6 +313,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: rootNavigatorKey,
         path: RouteNames.customerSupport,
         builder: (context, state) => const AiCustomerSupportScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
+        path: RouteNames.security2fa,
+        builder: (context, state) => const TwoFactorSettingsScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
+        path: RouteNames.deviceSessions,
+        builder: (context, state) => const DeviceSessionsScreen(),
+      ),
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
+        path: RouteNames.databaseBackup,
+        builder: (context, state) => const DatabaseBackupScreen(),
       ),
 
       // 2. Seller Shell

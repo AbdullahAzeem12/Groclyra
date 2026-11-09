@@ -33,6 +33,8 @@ enum AppThemePalette {
 
   Color get primaryColor => startColor;
   Color get secondaryColor => endColor;
+  Color get primary => startColor;
+  Color get secondary => endColor;
 
   String get id {
     switch (this) {

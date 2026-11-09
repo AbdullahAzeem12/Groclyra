@@ -159,6 +159,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
       
       _navigateByRole(result.user!.role);
+    } else if (result.requiresTwoFactor && result.user != null) {
+      _showTwoFactorModal(result.user!);
     } else if (result.isPendingApproval) {
       context.go(RouteNames.accountPending);
     } else if (result.requiresEmailVerification) {
@@ -198,11 +200,158 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     if (result.isSuccess && result.user != null) {
       _navigateByRole(result.user!.role);
+    } else if (result.requiresTwoFactor && result.user != null) {
+      _showTwoFactorModal(result.user!);
     } else if (result.isPendingApproval) {
       context.go(RouteNames.accountPending);
     } else if (result.requiresEmailVerification) {
       context.go(RouteNames.emailVerification);
     }
+  }
+
+  void _showTwoFactorModal(UserEntity user) {
+    final codeController = TextEditingController();
+    bool isVerifying = false;
+    String? localError;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalContext) {
+        final isDark = Theme.of(modalContext).brightness == Brightness.dark;
+        final palette = ref.watch(themeControllerProvider).palette;
+
+        return StatefulBuilder(
+          builder: (sheetContext, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(AppDimensions.p24),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF131A29) : Colors.white,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(AppDimensions.radiusLarge),
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppDimensions.p20),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: palette.primary.withValues(alpha: 0.15),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(Icons.security_rounded, color: palette.primary, size: 24),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Two-Factor Authentication',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? Colors.white : Colors.black87,
+                                ),
+                              ),
+                              Text(
+                                'Enter code from Google or Microsoft Authenticator',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isDark ? Colors.white60 : Colors.black54,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppDimensions.p20),
+                    TextField(
+                      controller: codeController,
+                      keyboardType: TextInputType.text,
+                      autofocus: true,
+                      style: const TextStyle(
+                        letterSpacing: 4,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                      decoration: InputDecoration(
+                        hintText: '000000',
+                        labelText: '6-Digit Code or Recovery Backup Code',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        errorText: localError,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    AuthGradientButton(
+                      text: 'Verify & Sign In',
+                      palette: palette,
+                      isLoading: isVerifying,
+                      onPressed: isVerifying
+                          ? null
+                          : () async {
+                              final input = codeController.text.trim();
+                              if (input.isEmpty) {
+                                setModalState(() => localError = 'Enter verification code');
+                                return;
+                              }
+                              setModalState(() {
+                                isVerifying = true;
+                                localError = null;
+                              });
+
+                              final result = await ref
+                                  .read(authControllerProvider.notifier)
+                                  .submitTwoFactorCode(input);
+
+                              if (!mounted) return;
+
+                              if (result.isSuccess && result.user != null) {
+                                if (sheetContext.mounted) {
+                                  Navigator.of(sheetContext).pop();
+                                }
+                                _navigateByRole(result.user!.role);
+                              } else {
+                                setModalState(() {
+                                  isVerifying = false;
+                                  localError = result.message ?? 'Invalid verification code';
+                                });
+                              }
+                            },
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _showPhoneAuthModal() {

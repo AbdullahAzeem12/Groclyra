@@ -156,6 +156,46 @@ class AppDatabase {
         await _db?.execute("ALTER TABLE users ADD COLUMN oauthProvider TEXT");
       } catch (_) {}
 
+      // Ensure enterprise security tables exist
+      try {
+        await _db?.execute('''
+          CREATE TABLE IF NOT EXISTS user_2fa (
+            userId TEXT PRIMARY KEY,
+            secretKey TEXT NOT NULL,
+            isEnabled INTEGER DEFAULT 0,
+            backupCodesJson TEXT,
+            createdAt TEXT NOT NULL,
+            updatedAt TEXT NOT NULL
+          )
+        ''');
+        await _db?.execute('''
+          CREATE TABLE IF NOT EXISTS user_sessions (
+            id TEXT PRIMARY KEY,
+            userId TEXT NOT NULL,
+            deviceId TEXT NOT NULL,
+            deviceName TEXT NOT NULL,
+            platform TEXT NOT NULL,
+            ipAddress TEXT,
+            lastActiveAt TEXT NOT NULL,
+            isCurrent INTEGER DEFAULT 0,
+            createdAt TEXT NOT NULL
+          )
+        ''');
+        await _db?.execute('CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(userId);');
+        await _db?.execute('CREATE INDEX IF NOT EXISTS idx_user_sessions_device ON user_sessions(deviceId);');
+        await _db?.execute('''
+          CREATE TABLE IF NOT EXISTS database_backups (
+            id TEXT PRIMARY KEY,
+            fileName TEXT NOT NULL,
+            filePath TEXT NOT NULL,
+            fileSizeBytes INTEGER NOT NULL,
+            checksum TEXT NOT NULL,
+            isEncrypted INTEGER DEFAULT 1,
+            createdAt TEXT NOT NULL
+          )
+        ''');
+      } catch (_) {}
+
       // Purge any legacy fake/static demo accounts
       try {
         await _db?.delete('users', where: "id LIKE 'usr_%_demo'");
@@ -586,7 +626,53 @@ class AppDatabase {
       )
     ''');
 
+    // 25. Two-Factor Authentication (RFC 6238 TOTP)
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS user_2fa (
+        userId TEXT PRIMARY KEY,
+        secretKey TEXT NOT NULL,
+        isEnabled INTEGER DEFAULT 0,
+        backupCodesJson TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      )
+    ''');
+
+    // 26. Active User Sessions & Device Management
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS user_sessions (
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        deviceId TEXT NOT NULL,
+        deviceName TEXT NOT NULL,
+        platform TEXT NOT NULL,
+        ipAddress TEXT,
+        lastActiveAt TEXT NOT NULL,
+        isCurrent INTEGER DEFAULT 0,
+        createdAt TEXT NOT NULL
+      )
+    ''');
+
+    // 27. Database Backups & Recovery Registry
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS database_backups (
+        id TEXT PRIMARY KEY,
+        fileName TEXT NOT NULL,
+        filePath TEXT NOT NULL,
+        fileSizeBytes INTEGER NOT NULL,
+        checksum TEXT NOT NULL,
+        isEncrypted INTEGER DEFAULT 1,
+        createdAt TEXT NOT NULL
+      )
+    ''');
+
     // Indexes
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(userId);',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_user_sessions_device ON user_sessions(deviceId);',
+    );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_home_banners_active ON home_banners(isActive, displayOrder);',
     );
@@ -793,6 +879,8 @@ class AppDatabase {
         return 'id';
       case 'schema_migrations':
         return 'version';
+      case 'user_2fa':
+        return 'userId';
       default:
         return 'id';
     }
@@ -807,14 +895,27 @@ class AppDatabase {
     final conditions = where.split(RegExp(r'\s+AND\s+', caseSensitive: false));
     int argIndex = 0;
     for (final condition in conditions) {
-      final parts = condition.trim().split(RegExp(r'\s*=\s*'));
-      if (parts.length == 2 && parts[1].trim() == '?') {
-        final col = parts[0].trim();
-        if (argIndex < whereArgs.length) {
-          final targetVal = whereArgs[argIndex]?.toString();
-          argIndex++;
-          final itemVal = item[col]?.toString();
-          if (itemVal != targetVal) return false;
+      if (condition.contains('!=')) {
+        final parts = condition.trim().split(RegExp(r'\s*!=\s*'));
+        if (parts.length == 2 && parts[1].trim() == '?') {
+          final col = parts[0].trim();
+          if (argIndex < whereArgs.length) {
+            final targetVal = whereArgs[argIndex]?.toString();
+            argIndex++;
+            final itemVal = item[col]?.toString();
+            if (itemVal == targetVal) return false;
+          }
+        }
+      } else {
+        final parts = condition.trim().split(RegExp(r'\s*=\s*'));
+        if (parts.length == 2 && parts[1].trim() == '?') {
+          final col = parts[0].trim();
+          if (argIndex < whereArgs.length) {
+            final targetVal = whereArgs[argIndex]?.toString();
+            argIndex++;
+            final itemVal = item[col]?.toString();
+            if (itemVal != targetVal) return false;
+          }
         }
       }
     }
@@ -1037,9 +1138,9 @@ class AppDatabase {
   void _seedMemoryTables() {
     // Memory categories
     final categories = PakistanCatalogDataset.getCategories();
-    _memoryTables['categories'] = categories.asMap().entries.map((e) {
+    _memoryTables['categories'] = categories.asMap().entries.map<Map<String, dynamic>>((e) {
       final c = e.value;
-      return {
+      return <String, dynamic>{
         'id': c.id,
         'name': c.name,
         'parentType': c.parentType.name,
@@ -1054,8 +1155,8 @@ class AppDatabase {
 
     // Memory products
     final products = PakistanCatalogDataset.getProducts();
-    _memoryTables['products'] = products.map((p) {
-      return {
+    _memoryTables['products'] = products.map<Map<String, dynamic>>((p) {
+      return <String, dynamic>{
         'id': p.id,
         'title': p.title,
         'description': p.description,
@@ -1082,7 +1183,7 @@ class AppDatabase {
 
     _memoryTables['users'] = [];
 
-    _memoryTables['vendor_integrations'] = [
+    _memoryTables['vendor_integrations'] = <Map<String, dynamic>>[
       {
         'id': 'vendor_alfatah',
         'name': 'Al-Fatah Gourmet Mart',
@@ -1142,34 +1243,15 @@ class AppDatabase {
       },
     ];
 
-    _memoryTables['delivery_tasks'] = [
-      {
-        'id': 'task_demo_001',
-        'subOrderId': 'sub_demo_001',
-        'orderId': 'ord_demo_001',
-        'orderNumber': 'GL-10001',
-        'sellerStoreName': 'Al-Fatah Gourmet Mart',
-        'sellerAddress': 'Main Gulberg, Lahore, Punjab',
-        'sellerPhone': '+92 42 111 253 282',
-        'customerName': 'Ayesha Khan',
-        'customerAddress': 'House 42, Street 8, DHA Phase 5, Lahore',
-        'customerPhone': '+92 300 1234567',
-        'distanceKm': 3.5,
-        'codAmount': 1850.0,
-        'estimatedEarnings': 220.0,
-        'status': 'available',
-        'customerOtp': '4821',
-        'createdAt': DateTime.now().toIso8601String(),
-      },
-    ];
+    _memoryTables['delivery_tasks'] = [];
 
-    _memoryTables['support_messages'] = [
+    _memoryTables['support_messages'] = <Map<String, dynamic>>[
       {
         'id': 'msg_welcome_ai',
         'threadId': 'thread_main',
         'senderType': 'aiAgent',
         'text':
-            'Assalam-o-Alaikum! ðŸ‘‹ I am your Groclyra 24/7 Intelligent Support Assistant, connected to your local SQL database and nationwide Pakistan delivery network.\n\nHow may I assist you with your orders, groceries, or crockery today?',
+            'Assalam-o-Alaikum! 👋 I am your Groclyra 24/7 Intelligent Support Assistant, connected to your local SQL database and nationwide Pakistan delivery network.\n\nHow may I assist you with your orders, groceries, or crockery today?',
         'createdAt': DateTime.now().toIso8601String(),
       },
     ];
@@ -1179,6 +1261,9 @@ class AppDatabase {
     _memoryTables['cart_cache'] ??= [];
     _memoryTables['app_rate_limits'] ??= [];
     _memoryTables['offline_mutations'] ??= [];
+    _memoryTables['user_2fa'] ??= [];
+    _memoryTables['user_sessions'] ??= [];
+    _memoryTables['database_backups'] ??= [];
   }
 
   void _seedVendorsBatch(sql.Batch batch) {

@@ -60,44 +60,44 @@ class _LivePromoBannerCarouselState extends ConsumerState<LivePromoBannerCarouse
   static const List<PromoBannerItem> _fallbackBanners = [
     PromoBannerItem(
       id: 'banner_crockery',
-      tag: '✨ ROYAL CROCKERY FESTIVAL • 35% OFF',
+      tag: 'ROYAL CROCKERY FESTIVAL • 35% OFF',
       title: 'Imperial Bone China & Crystal Dining',
       subtitle: 'Luxury 72-Pc Dinner Sets, Opal Glassware & Noritake Porcelain',
       badgeText: 'VERIFIED LUXURY',
-      floatingEmojis: '🍽️☕🥣',
+      floatingEmojis: '',
       gradientColors: [Color(0xFF1E1B4B), Color(0xFF3730A3), Color(0xFF6366F1)],
       targetPillar: MainCategoryType.crockery,
       ctaText: 'Explore Sets →',
     ),
     PromoBannerItem(
       id: 'banner_grocery',
-      tag: '🛒 MEGA PANTRY SAVINGS • FLAT 20% OFF',
+      tag: 'MEGA PANTRY SAVINGS • FLAT 20% OFF',
       title: 'Monthly Grocery Super Saver Pantry',
       subtitle: 'Super Basmati Rice, Pure Canola Oil & Shan Gourmet Spices',
       badgeText: 'SAME DAY DISPATCH',
-      floatingEmojis: '🌾🍚🧂',
+      floatingEmojis: '',
       gradientColors: [Color(0xFF064E3B), Color(0xFF047857), Color(0xFF10B981)],
       targetPillar: MainCategoryType.grocery,
       ctaText: 'Stock Pantry →',
     ),
     PromoBannerItem(
       id: 'banner_dairy',
-      tag: '🥛 100% PURE FARM FRESH • DAILY SPECIAL',
+      tag: '100% PURE FARM FRESH • DAILY SPECIAL',
       title: 'Sunrise Dairy Milk & Artisan Bakes',
       subtitle: 'Pure Farm Milk, Free-Range Eggs & Dawn Fresh Artisan Breads',
       badgeText: 'FRESH MORNING STOCK',
-      floatingEmojis: '🥛🧀🥖',
+      floatingEmojis: '',
       gradientColors: [Color(0xFF78350F), Color(0xFFB45309), Color(0xFFF59E0B)],
       targetPillar: MainCategoryType.dairyBakery,
       ctaText: 'View Bakery →',
     ),
     PromoBannerItem(
       id: 'banner_fastfood',
-      tag: '🔥 CRAVINGS EXPRESS • FLAT 25% OFF',
+      tag: 'CRAVINGS EXPRESS • FLAT 25% OFF',
       title: 'Crispy Broast, Burgers & Loaded Fries',
       subtitle: "Hot & Fresh from K&N's Deli, OPTP Grill & Partner Kitchens",
       badgeText: 'HOT IN 25 MINS',
-      floatingEmojis: '🍔🍟🍗',
+      floatingEmojis: '',
       gradientColors: [Color(0xFF881337), Color(0xFFBE123C), Color(0xFFFF5722)],
       targetPillar: MainCategoryType.fastFood,
       ctaText: 'Order Food →',
@@ -271,15 +271,22 @@ class _LivePromoBannerCarouselState extends ConsumerState<LivePromoBannerCarouse
                                 ),
                               ),
 
-                              // Floating Emojis Background Decor
+                              // Subtle Ambient Vector Graphic (Clean, modern e-commerce watermark)
                               Positioned(
-                                right: -8,
-                                bottom: -8,
+                                right: -10,
+                                bottom: -10,
                                 child: Opacity(
-                                  opacity: 0.16,
-                                  child: Text(
-                                    banner.floatingEmojis,
-                                    style: const TextStyle(fontSize: 64, letterSpacing: -2),
+                                  opacity: 0.12,
+                                  child: Icon(
+                                    banner.targetPillar == MainCategoryType.crockery
+                                        ? Icons.table_restaurant_rounded
+                                        : banner.targetPillar == MainCategoryType.grocery
+                                            ? Icons.shopping_basket_rounded
+                                            : banner.targetPillar == MainCategoryType.dairyBakery
+                                                ? Icons.bakery_dining_rounded
+                                                : Icons.fastfood_rounded,
+                                    size: 100,
+                                    color: Colors.white,
                                   ),
                                 ),
                               ),

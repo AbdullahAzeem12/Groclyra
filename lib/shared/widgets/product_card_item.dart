@@ -15,9 +15,8 @@ import 'shimmer_loading.dart';
 import 'package:go_router/go_router.dart';
 import '../../../routing/route_names.dart';
 import 'app_toggle_message.dart';
-import '../animations/rotating_border_glow_card.dart';
 
-class ProductCardItem extends ConsumerStatefulWidget {
+class ProductCardItem extends ConsumerWidget {
   final ProductEntity product;
   final VoidCallback? onTap;
 
@@ -28,77 +27,37 @@ class ProductCardItem extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<ProductCardItem> createState() => _ProductCardItemState();
-}
-
-class _ProductCardItemState extends ConsumerState<ProductCardItem> with SingleTickerProviderStateMixin {
-  late final AnimationController _glowController;
-
-  @override
-  void initState() {
-    super.initState();
-    _glowController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 3500),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _glowController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final themeState = ref.watch(themeControllerProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final categoryGlowColor = widget.product.isFastFood
-        ? (widget.product.restaurantType == 'bakery'
+    final accentColor = product.isFastFood
+        ? (product.restaurantType == 'bakery'
             ? const Color(0xFFE91E8C)
             : const Color(0xFFFF6B35))
-        : widget.product.isDairyBakery
+        : product.isDairyBakery
             ? const Color(0xFF10B981)
-            : widget.product.isCrockery
+            : product.isCrockery
                 ? const Color(0xFF8B5CF6)
                 : themeState.palette.primaryColor;
 
-    final categoryGlowSecondary = widget.product.isFastFood
-        ? (widget.product.restaurantType == 'bakery'
-            ? const Color(0xFFFF60A8)
-            : const Color(0xFFFFB03A))
-        : widget.product.isDairyBakery
-            ? const Color(0xFF34D399)
-            : widget.product.isCrockery
-                ? const Color(0xFFEC4899)
-                : themeState.palette.secondaryColor;
-
     return SpringTouchScale(
-      onTap: widget.onTap ?? () => context.push('${RouteNames.customerProductDetails}/${widget.product.id}', extra: widget.product),
-      child: RotatingBorderGlowCard(
-        rotateController: _glowController,
-        color: categoryGlowColor.withValues(alpha: 0.65),
-        secondaryColor: categoryGlowSecondary,
-        phaseOffset: (widget.product.hashCode % 100) / 100.0,
-        isDark: isDark,
-        borderRadius: AppDimensions.radiusMedium,
-        child: Container(
+      onTap: onTap ?? () => context.push('${RouteNames.customerProductDetails}/${product.id}', extra: product),
+      child: Container(
         decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF121722) : Colors.white,
+          color: isDark ? const Color(0xFF161C28) : Colors.white,
           borderRadius: BorderRadius.circular(AppDimensions.radiusMedium),
           border: Border.all(
             color: isDark ? const Color(0xFF262E3D) : const Color(0xFFE2E8F0),
+            width: 1.0,
           ),
-          boxShadow: isDark
-              ? []
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
+          boxShadow: [
+            BoxShadow(
+              color: isDark ? Colors.black.withValues(alpha: 0.25) : Colors.black.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -115,9 +74,9 @@ class _ProductCardItemState extends ConsumerState<ProductCardItem> with SingleTi
                   fit: StackFit.expand,
                   children: [
                     Base64Image(
-                      imageUrl: widget.product.primaryImage,
-                      categoryType: widget.product.categoryType,
-                      productTitle: widget.product.title,
+                      imageUrl: product.primaryImage,
+                      categoryType: product.categoryType,
+                      productTitle: product.title,
                       fit: BoxFit.cover,
                       alignment: Alignment.center,
                     ),
@@ -135,11 +94,11 @@ class _ProductCardItemState extends ConsumerState<ProductCardItem> with SingleTi
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
                               decoration: BoxDecoration(
-                                color: (widget.product.isDairyBakery
+                                color: (product.isDairyBakery
                                         ? const Color(0xFF10B981)
-                                        : widget.product.isFastFood
-                                            ? (widget.product.restaurantType == 'bakery' ? const Color(0xFFE91E8C) : const Color(0xFFFF6B35))
-                                            : widget.product.isCrockery
+                                        : product.isFastFood
+                                            ? (product.restaurantType == 'bakery' ? const Color(0xFFE91E8C) : const Color(0xFFFF6B35))
+                                            : product.isCrockery
                                                 ? AppColors.crockeryPill
                                                 : AppColors.groceryPill)
                                     .withValues(alpha: 0.92),
@@ -152,13 +111,13 @@ class _ProductCardItemState extends ConsumerState<ProductCardItem> with SingleTi
                                 ],
                               ),
                               child: Text(
-                                widget.product.isDairyBakery
-                                    ? '🥛 Dairy & Bakery'
-                                    : widget.product.isFastFood
-                                        ? (widget.product.restaurantType == 'bakery' ? '🧁 Bakery' : '🍔 Fast Food')
-                                        : widget.product.isCrockery
-                                            ? '🍽️ Crockery'
-                                            : '🛒 Grocery',
+                                product.isDairyBakery
+                                    ? 'Dairy & Bakery'
+                                    : product.isFastFood
+                                        ? (product.restaurantType == 'bakery' ? 'Bakery' : 'Fast Food')
+                                        : product.isCrockery
+                                            ? 'Crockery'
+                                            : 'Grocery',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
@@ -174,7 +133,7 @@ class _ProductCardItemState extends ConsumerState<ProductCardItem> with SingleTi
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (widget.product.isVegetarian == true) ...[
+                              if (product.isVegetarian == true) ...[
                                 Container(
                                   padding: const EdgeInsets.all(2.5),
                                   decoration: BoxDecoration(
@@ -185,7 +144,7 @@ class _ProductCardItemState extends ConsumerState<ProductCardItem> with SingleTi
                                 ),
                                 const SizedBox(width: 3),
                               ],
-                              if (widget.product.discountPercentage > 0) ...[
+                              if (product.discountPercentage > 0) ...[
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
                                   decoration: BoxDecoration(
@@ -193,7 +152,7 @@ class _ProductCardItemState extends ConsumerState<ProductCardItem> with SingleTi
                                     borderRadius: BorderRadius.circular(AppDimensions.radiusSmall),
                                   ),
                                   child: Text(
-                                    '-${widget.product.discountPercentage}%',
+                                    '-${product.discountPercentage}%',
                                     style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 9.5,
@@ -222,23 +181,23 @@ class _ProductCardItemState extends ConsumerState<ProductCardItem> with SingleTi
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: categoryGlowColor.withValues(alpha: 0.12),
+                      color: accentColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      widget.product.isFastFood
-                          ? (widget.product.restaurantName ?? widget.product.cuisineType ?? 'Fast Food')
-                          : widget.product.isDairyBakery
-                              ? (widget.product.subcategoryName ?? widget.product.weightVolume ?? 'Dairy & Bakery')
-                              : widget.product.isCrockery
-                                  ? (widget.product.material ?? '${widget.product.piecesCount ?? 1} Pcs')
-                                  : (widget.product.weightVolume ?? 'Food Staples'),
+                      product.isFastFood
+                          ? (product.restaurantName ?? product.cuisineType ?? 'Fast Food')
+                          : product.isDairyBakery
+                              ? (product.subcategoryName ?? product.weightVolume ?? 'Dairy & Bakery')
+                              : product.isCrockery
+                                  ? (product.material ?? '${product.piecesCount ?? 1} Pcs')
+                                  : (product.weightVolume ?? 'Food Staples'),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
-                        color: categoryGlowColor,
+                        color: accentColor,
                       ),
                     ),
                   ),
@@ -246,7 +205,7 @@ class _ProductCardItemState extends ConsumerState<ProductCardItem> with SingleTi
 
                   // Title
                   Text(
-                    widget.product.title,
+                    product.title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -260,26 +219,26 @@ class _ProductCardItemState extends ConsumerState<ProductCardItem> with SingleTi
                   // Rating & Reviews / Preparation Time (Bounded to prevent right overflow)
                   Row(
                     children: [
-                      if (widget.product.preparationTimeMinutes != null && widget.product.preparationTimeMinutes! > 0) ...[
+                      if (product.preparationTimeMinutes != null && product.preparationTimeMinutes! > 0) ...[
                         Icon(Icons.access_time_rounded, size: 12, color: Colors.grey[500]),
                         const SizedBox(width: 2),
                         Text(
-                          '${widget.product.preparationTimeMinutes}m',
+                          '${product.preparationTimeMinutes}m',
                           style: TextStyle(fontSize: 10, color: Colors.grey[500], fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(width: 5),
                       ],
-                      if (widget.product.rating > 0 && widget.product.reviewCount > 0) ...[
+                      if (product.rating > 0 && product.reviewCount > 0) ...[
                         const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
                         const SizedBox(width: 2),
                         Text(
-                          widget.product.rating.toStringAsFixed(1),
+                          product.rating.toStringAsFixed(1),
                           style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(width: 3),
                         Expanded(
                           child: Text(
-                            '(${widget.product.reviewCount} rev)',
+                            '(${product.reviewCount} rev)',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -288,12 +247,12 @@ class _ProductCardItemState extends ConsumerState<ProductCardItem> with SingleTi
                             ),
                           ),
                         ),
-                      ] else if (widget.product.isLiveSynced) ...[
+                      ] else if (product.isLiveSynced) ...[
                         const Icon(Icons.sync_rounded, color: Color(0xFF00B4D8), size: 13),
                         const SizedBox(width: 3),
                         Expanded(
                           child: Text(
-                            widget.product.sourceType == 'open_food_facts' ? 'Verified Catalog' : 'Mart Synced',
+                            product.sourceType == 'open_food_facts' ? 'Verified Catalog' : 'Mart Synced',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -306,7 +265,7 @@ class _ProductCardItemState extends ConsumerState<ProductCardItem> with SingleTi
                       ] else ...[
                         Expanded(
                           child: Text(
-                            widget.product.soldCount > 0 ? '${widget.product.soldCount} sold' : 'Direct Seller',
+                            product.soldCount > 0 ? '${product.soldCount} sold' : 'Direct Seller',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -332,7 +291,7 @@ class _ProductCardItemState extends ConsumerState<ProductCardItem> with SingleTi
                               fit: BoxFit.scaleDown,
                               alignment: Alignment.centerLeft,
                               child: Text(
-                                CurrencyFormatter.format(widget.product.salePrice),
+                                CurrencyFormatter.format(product.salePrice),
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.bold,
@@ -340,12 +299,12 @@ class _ProductCardItemState extends ConsumerState<ProductCardItem> with SingleTi
                                 ),
                               ),
                             ),
-                            if (widget.product.discountPercentage > 0)
+                            if (product.discountPercentage > 0)
                               FittedBox(
                                 fit: BoxFit.scaleDown,
                                 alignment: Alignment.centerLeft,
                                 child: Text(
-                                  CurrencyFormatter.format(widget.product.basePrice),
+                                  CurrencyFormatter.format(product.basePrice),
                                   style: TextStyle(
                                     fontSize: 10,
                                     decoration: TextDecoration.lineThrough,
@@ -361,11 +320,11 @@ class _ProductCardItemState extends ConsumerState<ProductCardItem> with SingleTi
                       // Quick Add to Cart Button
                       SpringTouchScale(
                         onTap: () {
-                          ref.read(cartControllerProvider.notifier).addItem(product: widget.product);
+                          ref.read(cartControllerProvider.notifier).addItem(product: product);
                           AppToggleMessage.cart(
                             context,
-                            title: widget.product.title,
-                            price: CurrencyFormatter.format(widget.product.salePrice),
+                            title: product.title,
+                            price: CurrencyFormatter.format(product.salePrice),
                             onAction: () => context.go(RouteNames.customerCart),
                           );
                         },
@@ -393,7 +352,6 @@ class _ProductCardItemState extends ConsumerState<ProductCardItem> with SingleTi
           ],
         ),
       ),
-    ),
     );
   }
 }

@@ -23,11 +23,11 @@ class _AiCustomerSupportScreenState extends ConsumerState<AiCustomerSupportScree
   final ScrollController _scrollController = ScrollController();
 
   final List<String> _quickPrompts = [
-    '📦 Track My Recent Order',
-    '🍽️ Report Broken Crockery',
-    '❌ Cancel My Order',
-    '🚚 Pakistan Delivery Cities & Timelines',
-    '🧑‍💼 Talk to a Human Support Agent',
+    'Track My Recent Order',
+    'Report Damaged or Missing Item',
+    'Cancel My Order',
+    'Delivery Coverage & Timelines',
+    'Talk to Human Support Agent',
     'Mera order kab pohnche ga?',
   ];
 
@@ -73,8 +73,8 @@ class _AiCustomerSupportScreenState extends ConsumerState<AiCustomerSupportScree
 
     return Scaffold(
       appBar: GradientAppBar(
-        title: 'Customer Support & Help Center',
-        subtitle: '24/7 Live AI Agent • Order & Policy Verified',
+        title: 'Customer Support',
+        subtitle: 'Always here to help • Available 24/7',
         showBack: true,
         showThemePicker: false,
         actions: [

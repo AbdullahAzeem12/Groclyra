@@ -350,3 +350,4 @@ class _DeviceSessionsScreenState extends ConsumerState<DeviceSessionsScreen> {
     return Icons.devices_other_rounded;
   }
 }
+

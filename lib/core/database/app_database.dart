@@ -1005,7 +1005,7 @@ class AppDatabase {
       'threadId': 'thread_main',
       'senderType': 'aiAgent',
       'text':
-          'Assalam-o-Alaikum! 👋 I am your Groclyra 24/7 Intelligent Support Assistant, connected to your local SQL database and nationwide Pakistan delivery network.\n\nHow may I assist you with your orders, groceries, or crockery today?',
+          'Assalam-o-Alaikum! 👋 How can we help you today with your orders, deliveries, or payments?',
       'createdAt': DateTime.now().toIso8601String(),
     });
 
@@ -1030,11 +1030,11 @@ class AppDatabase {
     final banners = [
       {
         'id': 'banner_crockery',
-        'tag': '✨ ROYAL CROCKERY FESTIVAL • 35% OFF',
+        'tag': 'ROYAL CROCKERY FESTIVAL • 35% OFF',
         'title': 'Imperial Bone China & Crystal Dining',
         'subtitle': 'Luxury 72-Pc Dinner Sets, Opal Glassware & Noritake Porcelain',
         'badgeText': 'VERIFIED LUXURY',
-        'floatingEmojis': '🍽️☕🥣',
+        'floatingEmojis': '',
         'gradientColorsJson': jsonEncode(['#1E1B4B', '#3730A3', '#6366F1']),
         'targetPillar': 'crockery',
         'ctaText': 'Explore Sets →',
@@ -1044,11 +1044,11 @@ class AppDatabase {
       },
       {
         'id': 'banner_grocery',
-        'tag': '🛒 MEGA PANTRY SAVINGS • FLAT 20% OFF',
+        'tag': 'MEGA PANTRY SAVINGS • FLAT 20% OFF',
         'title': 'Monthly Grocery Super Saver Pantry',
         'subtitle': 'Super Basmati Rice, Pure Canola Oil & Shan Gourmet Spices',
         'badgeText': 'SAME DAY DISPATCH',
-        'floatingEmojis': '🌾🍚🧂',
+        'floatingEmojis': '',
         'gradientColorsJson': jsonEncode(['#064E3B', '#047857', '#10B981']),
         'targetPillar': 'grocery',
         'ctaText': 'Stock Pantry →',
@@ -1058,11 +1058,11 @@ class AppDatabase {
       },
       {
         'id': 'banner_dairy',
-        'tag': '🥛 100% PURE FARM FRESH • DAILY SPECIAL',
+        'tag': '100% PURE FARM FRESH • DAILY SPECIAL',
         'title': 'Sunrise Dairy Milk & Artisan Bakes',
         'subtitle': 'Pure Farm Milk, Free-Range Eggs & Dawn Fresh Artisan Breads',
         'badgeText': 'FRESH MORNING STOCK',
-        'floatingEmojis': '🥛🧀🥖',
+        'floatingEmojis': '',
         'gradientColorsJson': jsonEncode(['#78350F', '#B45309', '#F59E0B']),
         'targetPillar': 'dairyBakery',
         'ctaText': 'View Bakery →',
@@ -1072,11 +1072,11 @@ class AppDatabase {
       },
       {
         'id': 'banner_fastfood',
-        'tag': '🔥 CRAVINGS EXPRESS • FLAT 25% OFF',
+        'tag': 'CRAVINGS EXPRESS • FLAT 25% OFF',
         'title': 'Crispy Broast, Burgers & Loaded Fries',
         'subtitle': "Hot & Fresh from K&N's Deli, OPTP Grill & Partner Kitchens",
         'badgeText': 'HOT IN 25 MINS',
-        'floatingEmojis': '🍔🍟🍗',
+        'floatingEmojis': '',
         'gradientColorsJson': jsonEncode(['#881337', '#BE123C', '#FF5722']),
         'targetPillar': 'fastFood',
         'ctaText': 'Order Food →',
@@ -1251,7 +1251,7 @@ class AppDatabase {
         'threadId': 'thread_main',
         'senderType': 'aiAgent',
         'text':
-            'Assalam-o-Alaikum! 👋 I am your Groclyra 24/7 Intelligent Support Assistant, connected to your local SQL database and nationwide Pakistan delivery network.\n\nHow may I assist you with your orders, groceries, or crockery today?',
+            'Assalam-o-Alaikum! 👋 How can we help you today with your orders, deliveries, or payments?',
         'createdAt': DateTime.now().toIso8601String(),
       },
     ];

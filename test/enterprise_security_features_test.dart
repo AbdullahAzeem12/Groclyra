@@ -14,7 +14,7 @@ void main() {
 
   group('1. RFC 6238 TOTP Two-Factor Authentication Tests', () {
     test('Base32 encode and decode handles arbitrary bytes accurately', () {
-      final text = 'Hello Groclyra 2026!';
+      const text = 'Hello Groclyra 2026!';
       final bytes = utf8.encode(text);
       final encoded = Base32.encode(bytes);
 
@@ -210,3 +210,4 @@ void main() {
     });
   });
 }
+

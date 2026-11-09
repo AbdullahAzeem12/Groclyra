@@ -26,8 +26,8 @@ class SupportRepository {
           threadId: 'thread_main',
           senderType: SupportSenderType.aiAgent,
           text:
-              'Assalam-o-Alaikum! 👋 I am your Groclyra 24/7 Intelligent Support Assistant, connected live to your account, orders, and nationwide Pakistan delivery network.\n\n'
-              'I can immediately track your active shipment, process crockery breakage claims under our 48-hr guarantee, cancel orders, or connect you with a human representative. How may I assist you today?',
+              'Assalam-o-Alaikum! 👋 How can we help you today with your orders, deliveries, or payments?\n\n'
+              'We can assist you with tracking active shipments, managing orders, or answering questions about any items.',
           createdAt: DateTime.now().subtract(const Duration(minutes: 5)),
         ),
       );

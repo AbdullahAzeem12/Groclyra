@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../storage/preferences_service.dart';
@@ -54,13 +53,7 @@ class ThemeController extends StateNotifier<ThemeState> {
   }
 
   void _listenToCloudTheme() {
-    try {
-      FirebaseAuth.instance.authStateChanges().listen((user) {
-        if (user != null) {
-          syncFromCloud(user.uid);
-        }
-      });
-    } catch (_) {}
+    // Theme preferences are persisted in SQLite app_preferences
   }
 
   Future<void> syncFromCloud(String uid) async {

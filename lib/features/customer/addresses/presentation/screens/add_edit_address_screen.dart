@@ -1,10 +1,10 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:groclyra/core/constants/app_dimensions.dart';
+import 'package:groclyra/core/database/app_database.dart';
 import 'package:groclyra/core/theme/theme_controller.dart';
 import 'package:groclyra/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:groclyra/shared/widgets/custom_text_field.dart';
@@ -250,7 +250,7 @@ class _AddEditAddressScreenState extends ConsumerState<AddEditAddressScreen> {
     final authState = ref.read(authControllerProvider);
     final userId = (authState.user?.id.isNotEmpty == true && authState.user?.id != 'usr_guest')
         ? authState.user!.id
-        : (FirebaseAuth.instance.currentUser?.uid ?? 'usr_guest');
+        : (AppDatabase.instance.activeSessionUserId ?? 'usr_guest');
 
     // Build formatted delivery address in words from what user physically wrote
     final parts = <String>[];

@@ -16,6 +16,8 @@ abstract class UsersTable {
   static const String colDeliveryAddress = 'deliveryAddress';
   static const String colDeliveryZone = 'deliveryZone';
   static const String colDeviceToken = 'deviceToken';
+  static const String colPasswordHash = 'passwordHash';
+  static const String colOauthProvider = 'oauthProvider';
   static const String colCreatedAt = 'createdAt';
   static const String colUpdatedAt = 'updatedAt';
   static const String colFullDataJson = 'fullDataJson';

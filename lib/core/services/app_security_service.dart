@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:groclyra/core/database/app_database.dart';
@@ -13,9 +12,7 @@ class AppSecurityService {
     AppDatabase? database,
   }) : _database = database ?? AppDatabase.instance;
 
-  FirebaseAuth get _auth => FirebaseAuth.instance;
-
-  String? get currentUserUid => _auth.currentUser?.uid;
+  String? get currentUserUid => AppDatabase.instance.activeSessionUserId;
 
   // ─────────────────────────────────────────────────────────────────────────
   // AUDIT TRAIL

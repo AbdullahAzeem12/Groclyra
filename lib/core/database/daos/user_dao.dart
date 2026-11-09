@@ -22,6 +22,32 @@ class UserDao {
     return results.isNotEmpty ? results.first : null;
   }
 
+  /// Fetch user by Email (case-insensitive)
+  Future<Map<String, dynamic>?> getUserByEmail(String email) async {
+    final db = await _getDb();
+    if (db == null) return null;
+    final results = await db.query(
+      UsersTable.tableName,
+      where: 'LOWER(${UsersTable.colEmail}) = ?',
+      whereArgs: [email.trim().toLowerCase()],
+      limit: 1,
+    );
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  /// Fetch user by Phone Number
+  Future<Map<String, dynamic>?> getUserByPhone(String phone) async {
+    final db = await _getDb();
+    if (db == null) return null;
+    final results = await db.query(
+      UsersTable.tableName,
+      where: '${UsersTable.colPhone} = ?',
+      whereArgs: [phone.trim()],
+      limit: 1,
+    );
+    return results.isNotEmpty ? results.first : null;
+  }
+
   /// Realtime stream of user profile
   Stream<Map<String, dynamic>?> watchUser(String id) {
     return _streamManager.createRealtimeQuery(

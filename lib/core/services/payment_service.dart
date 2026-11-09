@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
@@ -232,18 +231,11 @@ class EasypaisaHasher {
 
 class PaymentService {
   static final AppDatabase _db = AppDatabase.instance;
-  static final FirebaseAuth _auth = FirebaseAuth.instance;
   static final Map<String, Map<String, dynamic>> _txnMemory = {};
 
-  /// UID of the signed-in user initiating the payment (empty string when
-  /// unauthenticated). Stamped onto `paymentTransactions` docs so the
-  /// hardened Firestore rules can scope reads to the transaction owner.
+  /// UID of the signed-in user initiating the payment
   static String _currentUserUid() {
-    try {
-      return _auth.currentUser?.uid ?? '';
-    } catch (_) {
-      return '';
-    }
+    return _db.activeSessionUserId ?? '';
   }
 
   // ── READY CHECKS ─────────────────────────────────────────────────────────

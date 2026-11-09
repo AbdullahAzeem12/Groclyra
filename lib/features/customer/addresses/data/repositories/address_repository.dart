@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:groclyra/core/database/app_database.dart';
@@ -21,12 +20,10 @@ class AddressRepository {
     if (requestedUserId.isNotEmpty && requestedUserId != 'usr_guest') {
       return requestedUserId;
     }
-    try {
-      final fbUid = FirebaseAuth.instance.currentUser?.uid;
-      if (fbUid != null && fbUid.isNotEmpty) {
-        return fbUid;
-      }
-    } catch (_) {}
+    final activeId = AppDatabase.instance.activeSessionUserId;
+    if (activeId != null && activeId.isNotEmpty) {
+      return activeId;
+    }
     return requestedUserId.isNotEmpty ? requestedUserId : 'usr_guest';
   }
 

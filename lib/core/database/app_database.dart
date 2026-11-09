@@ -36,6 +36,9 @@ class AppDatabase {
   bool _isInitializing = false;
   bool _isTestMode = false;
 
+  /// Holds the current active authenticated user ID across all app portals and services.
+  String? activeSessionUserId;
+
   // Dedicated SQL Data Access Objects (DAOs)
   late final CatalogDao catalogDao = CatalogDao(() async {
     await init();
@@ -148,6 +151,18 @@ class AppDatabase {
         },
       );
 
+      // Ensure oauthProvider column exists
+      try {
+        await _db?.execute("ALTER TABLE users ADD COLUMN oauthProvider TEXT");
+      } catch (_) {}
+
+      // Purge any legacy fake/static demo accounts
+      try {
+        await _db?.delete('users', where: "id LIKE 'usr_%_demo'");
+        await _db?.delete('seller_profiles', where: "sellerId LIKE 'usr_%_demo'");
+        await _db?.delete('rider_profiles', where: "riderId LIKE 'usr_%_demo'");
+      } catch (_) {}
+
       // Seed if fresh
       await _seedSqliteDatabaseIfEmpty();
     } catch (e) {
@@ -176,6 +191,7 @@ class AppDatabase {
         licenseNumber TEXT,
         fcmToken TEXT,
         passwordHash TEXT,
+        oauthProvider TEXT,
         isOnline INTEGER DEFAULT 0,
         deliveryAddress TEXT,
         deliveryZone TEXT,
@@ -879,14 +895,18 @@ class AppDatabase {
       });
     }
 
-    // 3. Seed Default Accounts
-    _seedUsersBatch(batch);
-
-    // 4. Seed Partner Marts
+    // 3. Seed Partner Marts (Verified Pakistani Merchants)
     _seedVendorsBatch(batch);
 
-    // 5. Seed Demo Delivery Task
-    _seedRiderTaskBatch(batch);
+    // 4. Seed Support AI Welcome Assistant
+    batch.insert('support_messages', {
+      'id': 'msg_welcome_ai',
+      'threadId': 'thread_main',
+      'senderType': 'aiAgent',
+      'text':
+          'Assalam-o-Alaikum! 👋 I am your Groclyra 24/7 Intelligent Support Assistant, connected to your local SQL database and nationwide Pakistan delivery network.\n\nHow may I assist you with your orders, groceries, or crockery today?',
+      'createdAt': DateTime.now().toIso8601String(),
+    });
 
     // 6. Seed Coupons
     _seedCouponsBatch(batch);
@@ -1060,44 +1080,7 @@ class AppDatabase {
       };
     }).toList();
 
-    _memoryTables['users'] = [
-      {
-        'id': 'usr_customer_demo',
-        'name': 'Ali Khan',
-        'email': 'customer@groclyra.pk',
-        'phone': '03001234567',
-        'role': 'customer',
-        'accountStatus': 'active',
-        'createdAt': DateTime.now().toIso8601String(),
-      },
-      {
-        'id': 'usr_seller_demo',
-        'name': 'Imtiaz Store Manager',
-        'email': 'seller@groclyra.pk',
-        'phone': '03007654321',
-        'role': 'seller',
-        'accountStatus': 'active',
-        'createdAt': DateTime.now().toIso8601String(),
-      },
-      {
-        'id': 'usr_rider_demo',
-        'name': 'Hamza Delivery Rider',
-        'email': 'rider@groclyra.pk',
-        'phone': '03112233445',
-        'role': 'rider',
-        'accountStatus': 'active',
-        'createdAt': DateTime.now().toIso8601String(),
-      },
-      {
-        'id': 'usr_admin_demo',
-        'name': 'Platform Administrator',
-        'email': 'admin@groclyra.pk',
-        'phone': '03223344556',
-        'role': 'admin',
-        'accountStatus': 'active',
-        'createdAt': DateTime.now().toIso8601String(),
-      },
-    ];
+    _memoryTables['users'] = [];
 
     _memoryTables['vendor_integrations'] = [
       {
@@ -1198,51 +1181,6 @@ class AppDatabase {
     _memoryTables['offline_mutations'] ??= [];
   }
 
-  void _seedUsersBatch(sql.Batch batch) {
-    final now = DateTime.now().toIso8601String();
-    final demoUsers = [
-      {
-        'id': 'usr_customer_demo',
-        'name': 'Ali Khan',
-        'email': 'customer@groclyra.pk',
-        'phone': '03001234567',
-        'role': 'customer',
-        'accountStatus': 'active',
-        'createdAt': now,
-      },
-      {
-        'id': 'usr_seller_demo',
-        'name': 'Imtiaz Store Manager',
-        'email': 'seller@groclyra.pk',
-        'phone': '03007654321',
-        'role': 'seller',
-        'accountStatus': 'active',
-        'createdAt': now,
-      },
-      {
-        'id': 'usr_rider_demo',
-        'name': 'Hamza Delivery Rider',
-        'email': 'rider@groclyra.pk',
-        'phone': '03112233445',
-        'role': 'rider',
-        'accountStatus': 'active',
-        'createdAt': now,
-      },
-      {
-        'id': 'usr_admin_demo',
-        'name': 'Platform Administrator',
-        'email': 'admin@groclyra.pk',
-        'phone': '03223344556',
-        'role': 'admin',
-        'accountStatus': 'active',
-        'createdAt': now,
-      },
-    ];
-    for (final u in demoUsers) {
-      batch.insert('users', u);
-    }
-  }
-
   void _seedVendorsBatch(sql.Batch batch) {
     final now = DateTime.now().toIso8601String();
     final vendors = [
@@ -1307,35 +1245,5 @@ class AppDatabase {
     for (final v in vendors) {
       batch.insert('vendor_integrations', v);
     }
-  }
-
-  void _seedRiderTaskBatch(sql.Batch batch) {
-    batch.insert('delivery_tasks', {
-      'id': 'task_demo_001',
-      'subOrderId': 'sub_demo_001',
-      'orderId': 'ord_demo_001',
-      'orderNumber': 'GL-10001',
-      'sellerStoreName': 'Al-Fatah Gourmet Mart',
-      'sellerAddress': 'Main Gulberg, Lahore, Punjab',
-      'sellerPhone': '+92 42 111 253 282',
-      'customerName': 'Ayesha Khan',
-      'customerAddress': 'House 42, Street 8, DHA Phase 5, Lahore',
-      'customerPhone': '+92 300 1234567',
-      'distanceKm': 3.5,
-      'codAmount': 1850.0,
-      'estimatedEarnings': 220.0,
-      'status': 'available',
-      'customerOtp': '4821',
-      'createdAt': DateTime.now().toIso8601String(),
-    });
-
-    batch.insert('support_messages', {
-      'id': 'msg_welcome_ai',
-      'threadId': 'thread_main',
-      'senderType': 'aiAgent',
-      'text':
-          'Assalam-o-Alaikum! ðŸ‘‹ I am your Groclyra 24/7 Intelligent Support Assistant, connected to your local SQL database and nationwide Pakistan delivery network.\n\nHow may I assist you with your orders, groceries, or crockery today?',
-      'createdAt': DateTime.now().toIso8601String(),
-    });
   }
 }

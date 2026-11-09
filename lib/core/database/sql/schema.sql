@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS users (
     deliveryAddress TEXT,
     deliveryZone TEXT,
     deviceToken TEXT,
+    passwordHash TEXT,
+    oauthProvider TEXT,
     createdAt TEXT NOT NULL,
     updatedAt TEXT,
     fullDataJson TEXT

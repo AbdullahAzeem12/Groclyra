@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:groclyra/core/database/app_database.dart';
 import '../../domain/entities/seller_store_entity.dart';
 import '../../data/repositories/seller_repository.dart';
 import '../../../catalog/domain/entities/product_entity.dart';
@@ -120,7 +120,7 @@ class SellerController extends StateNotifier<SellerState> {
   Future<void> updateStoreProfile(Map<String, dynamic> updates) async {
     final effectiveSellerId = _sellerId.isNotEmpty
         ? _sellerId
-        : (FirebaseAuth.instance.currentUser?.uid ?? '');
+        : (AppDatabase.instance.activeSessionUserId ?? '');
     if (effectiveSellerId.isEmpty) {
       throw Exception('Seller account ID not found. Please log in as a seller.');
     }
@@ -134,7 +134,7 @@ final sellerControllerProvider =
   final authState = ref.watch(authControllerProvider);
   final sellerId = authState.user?.id.isNotEmpty == true
       ? authState.user!.id
-      : (FirebaseAuth.instance.currentUser?.uid ?? '');
+      : (AppDatabase.instance.activeSessionUserId ?? '');
   return SellerController(repository, sellerId);
 });
 

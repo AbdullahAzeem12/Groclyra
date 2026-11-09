@@ -90,6 +90,8 @@ class FirestoreUserRepository {
   Future<void> createUserProfile({
     required UserEntity user,
     Map<String, dynamic>? additionalRoleData,
+    String? passwordHash,
+    String? oauthProvider,
   }) async {
     final now = DateTime.now().toIso8601String();
     final rawMap = user.toFirestore();
@@ -108,7 +110,8 @@ class FirestoreUserRepository {
       'vehicleNumber': user.vehicleNumber,
       'licenseNumber': user.drivingLicenseNumber,
       'fcmToken': null,
-      'passwordHash': null,
+      'passwordHash': passwordHash,
+      'oauthProvider': oauthProvider ?? 'password',
       'isOnline': 1,
       'deliveryAddress': user.deliveryAddress,
       'deliveryZone': user.deliveryZone,
@@ -169,6 +172,40 @@ class FirestoreUserRepository {
   Future<UserRole?> findUserRoleAcrossSegments(String uid) async {
     final user = await getUser(uid);
     return user?.role;
+  }
+
+  /// Retrieves the stored password hash for the user from SQLite
+  Future<String?> getPasswordHash(String uid) async {
+    try {
+      final rows = await _database.query(
+        'users',
+        columns: ['passwordHash'],
+        where: 'id = ?',
+        whereArgs: [uid],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        return rows.first['passwordHash'] as String?;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Retrieves the OAuth provider (e.g. 'google', 'password') from SQLite
+  Future<String?> getOauthProvider(String uid) async {
+    try {
+      final rows = await _database.query(
+        'users',
+        columns: ['oauthProvider'],
+        where: 'id = ?',
+        whereArgs: [uid],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        return rows.first['oauthProvider'] as String?;
+      }
+    } catch (_) {}
+    return null;
   }
 
   /// Updates specific user fields in SQLite

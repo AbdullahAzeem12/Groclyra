@@ -77,11 +77,33 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   void _listenAuthState() {
-    _repository.authStateChanges.listen((firebaseUser) async {
-      if (firebaseUser == null) {
+    _repository.authStateChanges.listen((user) async {
+      if (user == null) {
         // User is logged out
         if (state.user != null) {
           state = state.copyWith(clearUser: true);
+        }
+      } else {
+        if (state.user?.id != user.id || state.user != user) {
+          state = state.copyWith(
+            user: user,
+            selectedRole: user.role,
+            status: AuthResultStatus.success,
+          );
+        }
+      }
+    });
+
+    // Real-time table watcher on SQLite users
+    AppDatabase.instance.watchTable('users').listen((_) async {
+      final uid = state.user?.id ?? AppDatabase.instance.activeSessionUserId;
+      if (uid != null && uid.isNotEmpty) {
+        final row = await AppDatabase.instance.userDao.getUserById(uid);
+        if (row != null && mounted) {
+          final updated = UserEntity.fromJson(row);
+          if (updated != state.user) {
+            state = state.copyWith(user: updated);
+          }
         }
       }
     });
@@ -323,12 +345,13 @@ class AuthController extends StateNotifier<AuthState> {
     try {
       final rows = await AppDatabase.instance.query(
         'users',
-        where: 'email = ?',
-        whereArgs: [email],
+        where: 'LOWER(email) = ?',
+        whereArgs: [email.trim().toLowerCase()],
         limit: 1,
       );
       if (rows.isNotEmpty) {
         final user = UserEntity.fromJson(rows.first);
+        AppDatabase.instance.activeSessionUserId = user.id;
         state = state.copyWith(
           user: user,
           isLoading: false,
@@ -339,23 +362,13 @@ class AuthController extends StateNotifier<AuthState> {
       }
     } catch (_) {}
 
-    final fallbackUser = UserEntity(
-      id: 'usr_bio_${role.name}',
-      email: email.isNotEmpty ? email : '${role.name}@groclyra.pk',
-      name: '${role.displayName} User',
-      phone: '+92 300 0000000',
-      role: role,
-      isVerified: true,
-      createdAt: DateTime.now(),
-    );
-
     state = state.copyWith(
-      user: fallbackUser,
       isLoading: false,
-      status: AuthResultStatus.success,
-      successMessage: 'Biometric authentication verified ✓',
+      errorMessage: 'No registered account found matching biometric enrollment for $email.',
     );
-    return AuthResult.success(fallbackUser, message: 'Welcome back, ${fallbackUser.name}');
+    return AuthResult.failure(
+      'No registered account found matching biometric credentials. Please sign in with email and password.',
+    );
   }
 
   Future<void> sendPhoneOtp({

@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:groclyra/core/database/app_database.dart';
+import 'package:groclyra/features/auth/presentation/controllers/auth_controller.dart';
 import '../../data/repositories/address_repository.dart';
 import '../../domain/entities/delivery_address_entity.dart';
 
@@ -41,43 +42,25 @@ class AddressState {
 
 class AddressController extends StateNotifier<AddressState> {
   final AddressRepository _repository;
-  final FirebaseAuth? _explicitAuth;
 
-  FirebaseAuth? get _auth {
-    if (_explicitAuth != null) return _explicitAuth;
-    try {
-      return FirebaseAuth.instance;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// StreamSubscription for the Firestore address collection
+  /// StreamSubscription for the SQLite address table
   StreamSubscription<List<DeliveryAddressEntity>>? _addressSub;
 
-  /// StreamSubscription watching FirebaseAuth sign-in state
-  StreamSubscription<User?>? _authSub;
-
-  AddressController(this._repository, {FirebaseAuth? firebaseAuth})
-      : _explicitAuth = firebaseAuth,
-        super(const AddressState(isLoading: true)) {
-    // 1. Immediately initialize with current Firebase Auth user if available
-    final currentUid = _auth?.currentUser?.uid ?? '';
+  AddressController(this._repository, {String? initialUserId, dynamic firebaseAuth})
+      : super(const AddressState(isLoading: true)) {
+    final currentUid = initialUserId ?? AppDatabase.instance.activeSessionUserId ?? '';
     if (currentUid.isNotEmpty) {
       _reInitStream(currentUid);
     } else {
       state = state.copyWith(isLoading: false);
     }
-
-    // 2. Listen to Firebase Auth state changes
-    _authSub = _auth?.authStateChanges().listen(_onAuthChanged);
   }
 
-  void _onAuthChanged(User? user) {
-    final uid = user?.uid ?? '';
-    if (uid == state.activeUserId && _addressSub != null) return;
-    debugPrint('[AddressController] Auth changed → uid=$uid. Re-initializing stream.');
-    _reInitStream(uid);
+  void updateActiveUser(String? uid) {
+    final effectiveUid = uid ?? AppDatabase.instance.activeSessionUserId ?? '';
+    if (effectiveUid == state.activeUserId && _addressSub != null) return;
+    debugPrint('[AddressController] User changed → uid=$effectiveUid. Re-initializing address stream.');
+    _reInitStream(effectiveUid);
   }
 
   void _reInitStream(String uid) {
@@ -121,11 +104,19 @@ class AddressController extends StateNotifier<AddressState> {
     );
   }
 
+  String _resolveUserId([String? passedUid]) {
+    if (passedUid != null && passedUid.isNotEmpty && passedUid != 'usr_guest') {
+      return passedUid;
+    }
+    if (state.activeUserId.isNotEmpty && state.activeUserId != 'usr_guest') {
+      return state.activeUserId;
+    }
+    return AppDatabase.instance.activeSessionUserId ?? '';
+  }
+
   Future<void> saveAddress(DeliveryAddressEntity address) async {
-    // 1. Resolve effective uid — use address.userId, else live Firebase Auth uid
-    final effectiveUid = address.userId.isNotEmpty && address.userId != 'usr_guest'
-        ? address.userId
-        : (_auth?.currentUser?.uid ?? '');
+    // 1. Resolve effective uid — use address.userId, else session uid
+    final effectiveUid = _resolveUserId(address.userId);
 
     final readyAddress = address.copyWith(
       userId: effectiveUid,
@@ -170,20 +161,16 @@ class AddressController extends StateNotifier<AddressState> {
     }
   }
 
-  /// Manually re-sync addresses from Firestore
+  /// Manually re-sync addresses from SQLite
   Future<void> refresh() async {
-    final uid = state.activeUserId.isNotEmpty
-        ? state.activeUserId
-        : (_auth?.currentUser?.uid ?? '');
+    final uid = _resolveUserId();
     if (uid.isNotEmpty) {
       _reInitStream(uid);
     }
   }
 
   Future<void> setDefaultAddress(String addressId) async {
-    final uid = state.activeUserId.isNotEmpty
-        ? state.activeUserId
-        : (_auth?.currentUser?.uid ?? '');
+    final uid = _resolveUserId();
 
     final updatedList = List<DeliveryAddressEntity>.from(state.addresses);
     DeliveryAddressEntity? chosen;
@@ -206,9 +193,7 @@ class AddressController extends StateNotifier<AddressState> {
   }
 
   Future<void> deleteAddress(String addressId) async {
-    final uid = state.activeUserId.isNotEmpty
-        ? state.activeUserId
-        : (_auth?.currentUser?.uid ?? '');
+    final uid = _resolveUserId();
 
     final updatedList = List<DeliveryAddressEntity>.from(state.addresses)
       ..removeWhere((a) => a.id == addressId);
@@ -231,7 +216,6 @@ class AddressController extends StateNotifier<AddressState> {
 
   @override
   void dispose() {
-    _authSub?.cancel();
     _addressSub?.cancel();
     super.dispose();
   }
@@ -240,5 +224,11 @@ class AddressController extends StateNotifier<AddressState> {
 final addressControllerProvider =
     StateNotifierProvider<AddressController, AddressState>((ref) {
   final repo = ref.watch(addressRepositoryProvider);
-  return AddressController(repo);
+  final user = ref.watch(authControllerProvider).user;
+  final effectiveUid = user?.id ?? AppDatabase.instance.activeSessionUserId;
+  final controller = AddressController(repo, initialUserId: effectiveUid);
+  ref.listen(authControllerProvider.select((s) => s.user?.id), (prev, next) {
+    controller.updateActiveUser(next);
+  });
+  return controller;
 });

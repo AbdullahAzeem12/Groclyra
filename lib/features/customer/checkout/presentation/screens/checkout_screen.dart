@@ -17,6 +17,8 @@ import 'package:groclyra/features/customer/orders/domain/entities/order_entity.d
 import 'package:groclyra/features/customer/orders/presentation/controllers/orders_controller.dart';
 import 'package:groclyra/features/customer/checkout/presentation/screens/payment_webview_screen.dart';
 import 'package:groclyra/features/customer/cart/domain/entities/cart_item_entity.dart';
+import 'package:groclyra/features/customer/addresses/presentation/controllers/address_controller.dart';
+import 'package:groclyra/core/services/location_service.dart';
 import 'package:groclyra/shared/animations/rotating_border_glow_card.dart';
 import 'package:groclyra/shared/widgets/app_toggle_message.dart';
 import 'package:groclyra/shared/widgets/base64_image.dart';
@@ -63,7 +65,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> with SingleTick
     if (checkoutItems.isEmpty) return;
 
     final user = authState.user;
-    final deliveryAddress = user?.deliveryAddress ?? user?.deliveryZone ?? '';
+    final addressState = ref.read(addressControllerProvider);
+    final selectedAddress = addressState.defaultAddress ??
+        (addressState.addresses.isNotEmpty ? addressState.addresses.first : null);
+
+    final deliveryAddress = selectedAddress?.formattedAddress ??
+        user?.deliveryAddress ??
+        user?.deliveryZone ??
+        '';
+
     if (deliveryAddress.isEmpty) {
       AppToggleMessage.warning(
         context,
@@ -72,6 +82,19 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> with SingleTick
       );
       return;
     }
+
+    double? lat = selectedAddress?.latitude;
+    double? lng = selectedAddress?.longitude;
+    if (lat == null || lng == null || (lat == 0.0 && lng == 0.0)) {
+      final resolved = await LocationService().resolveAddressCoordinates(
+        deliveryAddress,
+        city: selectedAddress?.city,
+      );
+      lat = resolved.lat;
+      lng = resolved.lng;
+    }
+
+    if (!mounted) return;
 
     if (_selectedPayment != PaymentMethod.payFast &&
         _selectedPayment != PaymentMethod.creditDebitCard &&
@@ -104,7 +127,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> with SingleTick
     final computedDiscount = widget.directItem != null ? 0.0 : cartState.discountAmount;
     final computedGrandTotal = (computedSubtotal + computedShipping - computedDiscount).clamp(0.0, double.infinity);
 
-    // 1. Create the order in Firestore with 'pending' payment status
+    // 1. Create the order in SQLite with 'pending' payment status
     final order = await ref.read(ordersControllerProvider.notifier).placeOrder(
           customerId: user?.id ?? 'usr_guest',
           customerName: user?.name ?? 'Valued Customer',
@@ -113,6 +136,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> with SingleTick
           items: checkoutItems,
           discountAmount: computedDiscount,
           paymentMethod: _selectedPayment,
+          customerLat: lat,
+          customerLng: lng,
         );
 
     if (order == null) {

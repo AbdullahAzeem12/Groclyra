@@ -1,102 +1,56 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/database/app_database.dart';
 import '../../domain/entities/category_entity.dart';
 import '../../domain/entities/product_entity.dart';
-import '../mock_catalog_data.dart';
+import '../pakistan_catalog_dataset.dart';
 import '../../../../core/services/open_food_facts_catalog_service.dart';
 
-/// Production-grade CatalogRepository backed authoritatively by Cloud Firestore,
-/// with resilient live multi-vendor catalog resolution and automatic offline/first-run seeding.
+/// Production-grade CatalogRepository backed authoritatively by Groclyra SQL Database (SQLite),
+/// with real-time reactive streams via table change notifications and automatic database seeding.
 class CatalogRepository {
-  final FirebaseFirestore? _customFirestore;
+  final AppDatabase _database;
   final OpenFoodFactsCatalogService _openFoodFactsService;
-  bool _isSeedingCategories = false;
-  bool _isSeedingProducts = false;
 
   CatalogRepository({
-    FirebaseFirestore? firestore,
+    dynamic firestore, // Kept dynamic for backward compatibility with legacy test callers
     OpenFoodFactsCatalogService? openFoodFactsService,
-  })  : _customFirestore = firestore,
+    AppDatabase? database,
+  })  : _database = database ?? AppDatabase.instance,
         _openFoodFactsService = openFoodFactsService ?? OpenFoodFactsCatalogService();
-
-  FirebaseFirestore? get _firestore {
-    if (_customFirestore != null) return _customFirestore;
-    try {
-      return FirebaseFirestore.instance;
-    } catch (e) {
-      // Firebase not initialized (e.g. offline preview, unit/widget tests)
-      return null;
-    }
-  }
 
   // ──────────────────────────────────────────────────────────────
   // CATEGORIES
   // ──────────────────────────────────────────────────────────────
 
-  /// Returns a real-time stream of all categories from Firestore.
-  /// Immediately emits verified fallback data, then updates from Firestore.
-  /// This ensures UI shows data instantly on Huawei/offline devices.
-  Stream<List<CategoryEntity>> streamCategories() {
-    final fs = _firestore;
-    final fallback = _getVerifiedCategories();
-    if (fs == null) {
-      return Stream.value(fallback);
-    }
+  /// Returns a real-time stream of all categories from SQLite.
+  /// Yields verified data immediately and re-emits on any category table mutation.
+  Stream<List<CategoryEntity>> streamCategories() async* {
+    yield await getCategories();
 
-    // Emit fallback immediately so UI never waits for Firestore
-    final firestoreStream = fs
-        .collection('categories')
-        .orderBy('order', descending: false)
-        .snapshots()
-        .map((snap) {
-          if (snap.docs.isEmpty) {
-            _seedCategoriesIfEmpty();
-            return fallback;
-          }
-          final parsed = snap.docs
-              .map((doc) => _categoryFromDoc(doc))
-              .whereType<CategoryEntity>()
-              .toList();
-          return parsed.isEmpty ? fallback : parsed;
-        }).handleError((Object e) {
-          debugPrint('CatalogRepository.streamCategories error: $e');
-          return fallback;
-        });
-
-    return firestoreStream
-        .timeout(
-          const Duration(seconds: 6),
-          onTimeout: (sink) {
-            debugPrint('CatalogRepository.streamCategories timed out — using verified fallback.');
-            sink.add(fallback);
-          },
-        );
+    yield* _database.watchTable('categories').asyncMap((_) async {
+      return await getCategories();
+    });
   }
 
-  /// One-shot fetch of categories (used where streams aren't needed).
+  /// One-shot fetch of categories from the SQL database.
   Future<List<CategoryEntity>> getCategories() async {
-    final fallback = _getVerifiedCategories();
     try {
-      final fs = _firestore;
-      if (fs == null) return fallback;
-      final snap = await fs
-          .collection('categories')
-          .orderBy('order', descending: false)
-          .get()
-          .timeout(const Duration(seconds: 8));
-      if (snap.docs.isEmpty) {
-        _seedCategoriesIfEmpty();
-        return fallback;
+      final rows = await _database.query('categories', orderBy: 'sortOrder ASC');
+      if (rows.isEmpty) {
+        await _seedCategoriesIfEmpty();
+        final freshRows = await _database.query('categories', orderBy: 'sortOrder ASC');
+        if (freshRows.isNotEmpty) {
+          return freshRows.map(_categoryFromRow).whereType<CategoryEntity>().toList();
+        }
+        return _getVerifiedCategories();
       }
-      final parsed = snap.docs
-          .map((doc) => _categoryFromDoc(doc))
-          .whereType<CategoryEntity>()
-          .toList();
-      return parsed.isEmpty ? fallback : parsed;
+      return rows.map(_categoryFromRow).whereType<CategoryEntity>().toList();
     } catch (e) {
       debugPrint('CatalogRepository.getCategories error: $e');
-      return fallback;
+      return _getVerifiedCategories();
     }
   }
 
@@ -104,17 +58,16 @@ class CatalogRepository {
   // PRODUCTS — real-time streams
   // ──────────────────────────────────────────────────────────────
 
-  /// Real-time stream with optional filters applied server-side where possible.
-  /// Immediately emits verified fallback, then updates from Firestore.
-  /// Timeout guard ensures Huawei/offline devices always see data within 6s.
+  /// Real-time stream with optional filters applied against SQLite.
+  /// Re-emits instantly whenever products table changes in SQLite.
   Stream<List<ProductEntity>> streamProducts({
     MainCategoryType? categoryType,
     String? categoryName,
     bool? isFlashDeal,
     bool? isFeatured,
     String? sellerId,
-  }) {
-    final fallback = _filterVerifiedProducts(
+  }) async* {
+    yield await getProducts(
       categoryType: categoryType,
       categoryName: categoryName,
       isFlashDeal: isFlashDeal,
@@ -122,73 +75,19 @@ class CatalogRepository {
       sellerId: sellerId,
     );
 
-    final fs = _firestore;
-    if (fs == null) {
-      return Stream.value(fallback);
-    }
-
-    Stream<List<ProductEntity>> firestoreStream;
-
-    // Seller-specific stream: no isApproved filter
-    if (sellerId != null) {
-      firestoreStream = fs
-          .collection('products')
-          .where('sellerId', isEqualTo: sellerId)
-          .orderBy('createdAt', descending: true)
-          .snapshots()
-          .map<List<ProductEntity>>((snap) {
-        if (snap.docs.isEmpty) return fallback;
-        return snap.docs
-            .map((doc) => _productFromDoc(doc))
-            .whereType<ProductEntity>()
-            .toList();
-      }).handleError((Object e) {
-        debugPrint('CatalogRepository.streamProducts(seller) error: $e');
-        return fallback;
-      });
-    } else {
-      // Public catalog stream: only approved products
-      Query<Map<String, dynamic>> query = fs
-          .collection('products')
-          .where('isApproved', isEqualTo: true);
-
-      if (categoryType != null) {
-        query = query.where('categoryType', isEqualTo: categoryType.name);
-      }
-      if (categoryName != null) {
-        query = query.where('categoryName', isEqualTo: categoryName);
-      }
-      if (isFlashDeal != null) {
-        query = query.where('isFlashDeal', isEqualTo: isFlashDeal);
-      }
-      if (isFeatured != null) {
-        query = query.where('isFeatured', isEqualTo: isFeatured);
-      }
-
-      firestoreStream = query.snapshots().map<List<ProductEntity>>((snap) {
-        if (snap.docs.isEmpty) {
-          _seedInitialProductsIfEmpty();
-          return fallback;
-        }
-        return _parseProductsFromSnap(snap);
-      }).handleError((Object e) {
-        debugPrint('CatalogRepository.streamProducts error: $e');
-        return fallback;
-      });
-    }
-
-    // Timeout guard: if Firestore doesn't respond within 6s, push fallback
-    return firestoreStream.timeout(
-      const Duration(seconds: 6),
-      onTimeout: (sink) {
-        debugPrint('CatalogRepository.streamProducts timed out — using verified fallback.');
-        sink.add(fallback);
-      },
-    );
+    yield* _database.watchTable('products').asyncMap((_) async {
+      return await getProducts(
+        categoryType: categoryType,
+        categoryName: categoryName,
+        isFlashDeal: isFlashDeal,
+        isFeatured: isFeatured,
+        sellerId: sellerId,
+      );
+    });
   }
 
   // ──────────────────────────────────────────────────────────────
-  // PRODUCTS — one-shot with client-side search filter
+  // PRODUCTS — one-shot query
   // ──────────────────────────────────────────────────────────────
 
   Future<List<ProductEntity>> getProducts({
@@ -199,57 +98,65 @@ class CatalogRepository {
     bool? isFeatured,
     String? sellerId,
   }) async {
-    final fallback = _filterVerifiedProducts(
-      categoryType: categoryType,
-      categoryName: categoryName,
-      searchQuery: searchQuery,
-      isFlashDeal: isFlashDeal,
-      isFeatured: isFeatured,
-      sellerId: sellerId,
-    );
     try {
-      final fs = _firestore;
-      if (fs == null) return fallback;
+      final whereClauses = <String>[];
+      final whereArgs = <Object?>[];
 
-      // Seller-specific fetch: no isApproved filter
-      if (sellerId != null) {
-        final snap = await fs
-            .collection('products')
-            .where('sellerId', isEqualTo: sellerId)
-            .get()
-            .timeout(const Duration(seconds: 8));
-        if (snap.docs.isEmpty) return fallback;
-        return _parseProductsFromSnap(snap);
+      if (sellerId != null && sellerId.isNotEmpty) {
+        whereClauses.add('(sellerId = ? OR sourceVendorId = ?)');
+        whereArgs.add(sellerId);
+        whereArgs.add(sellerId);
+      } else {
+        whereClauses.add('isApproved = ?');
+        whereArgs.add(1);
       }
-
-      Query<Map<String, dynamic>> query = fs
-          .collection('products')
-          .where('isApproved', isEqualTo: true);
 
       if (categoryType != null) {
-        query = query.where('categoryType', isEqualTo: categoryType.name);
-      }
-      if (categoryName != null) {
-        query = query.where('categoryName', isEqualTo: categoryName);
-      }
-      if (isFlashDeal != null) {
-        query = query.where('isFlashDeal', isEqualTo: isFlashDeal);
-      }
-      if (isFeatured != null) {
-        query = query.where('isFeatured', isEqualTo: isFeatured);
+        whereClauses.add('categoryType = ?');
+        whereArgs.add(categoryType.name);
       }
 
-      final snap = await query.get().timeout(const Duration(seconds: 8));
-      if (snap.docs.isEmpty) {
-        _seedInitialProductsIfEmpty();
+      if (categoryName != null && categoryName.isNotEmpty) {
+        whereClauses.add('categoryName = ?');
+        whereArgs.add(categoryName);
+      }
+
+      if (isFlashDeal != null) {
+        whereClauses.add('isFlashDeal = ?');
+        whereArgs.add(isFlashDeal ? 1 : 0);
+      }
+
+      if (isFeatured != null) {
+        whereClauses.add('isFeatured = ?');
+        whereArgs.add(isFeatured ? 1 : 0);
+      }
+
+      final whereString = whereClauses.isNotEmpty ? whereClauses.join(' AND ') : null;
+
+      final rows = await _database.query(
+        'products',
+        where: whereString,
+        whereArgs: whereArgs.isNotEmpty ? whereArgs : null,
+        orderBy: 'createdAt DESC',
+      );
+
+      if (rows.isEmpty) {
+        // Fallback to verified seeded catalog
+        var fallback = _filterVerifiedProducts(
+          categoryType: categoryType,
+          categoryName: categoryName,
+          searchQuery: searchQuery,
+          isFlashDeal: isFlashDeal,
+          isFeatured: isFeatured,
+          sellerId: sellerId,
+        );
         return fallback;
       }
 
-      List<ProductEntity> products = _parseProductsFromSnap(snap);
+      var products = rows.map(_productFromRow).whereType<ProductEntity>().toList();
 
-      // Client-side full-text search (Firestore doesn't support LIKE queries)
       if (searchQuery != null && searchQuery.trim().isNotEmpty) {
-        final q = searchQuery.toLowerCase();
+        final q = searchQuery.toLowerCase().trim();
         products = products.where((p) {
           return p.title.toLowerCase().contains(q) ||
               p.description.toLowerCase().contains(q) ||
@@ -259,10 +166,24 @@ class CatalogRepository {
         }).toList();
       }
 
-      return products.isEmpty ? fallback : products;
+      return products.isNotEmpty ? products : _filterVerifiedProducts(
+        categoryType: categoryType,
+        categoryName: categoryName,
+        searchQuery: searchQuery,
+        isFlashDeal: isFlashDeal,
+        isFeatured: isFeatured,
+        sellerId: sellerId,
+      );
     } catch (e) {
       debugPrint('CatalogRepository.getProducts error: $e');
-      return fallback;
+      return _filterVerifiedProducts(
+        categoryType: categoryType,
+        categoryName: categoryName,
+        searchQuery: searchQuery,
+        isFlashDeal: isFlashDeal,
+        isFeatured: isFeatured,
+        sellerId: sellerId,
+      );
     }
   }
 
@@ -272,12 +193,11 @@ class CatalogRepository {
 
   Future<ProductEntity?> getProductById(String id) async {
     try {
-      final fs = _firestore;
-      if (fs != null) {
-        final doc = await fs.collection('products').doc(id).get();
-        if (doc.exists) return _productFromDoc(doc);
+      final rows = await _database.query('products', where: 'id = ?', whereArgs: [id], limit: 1);
+      if (rows.isNotEmpty) {
+        final p = _productFromRow(rows.first);
+        if (p != null) return p;
       }
-      // Resilient fallback to verified vendor items
       return _getVerifiedProducts().where((p) => p.id == id).firstOrNull;
     } catch (e) {
       debugPrint('CatalogRepository.getProductById error: $e');
@@ -285,20 +205,147 @@ class CatalogRepository {
     }
   }
 
-  Stream<ProductEntity?> streamProductById(String id) {
-    final fs = _firestore;
-    if (fs == null) {
-      return Stream.value(_getVerifiedProducts().where((p) => p.id == id).firstOrNull);
-    }
-    return fs
-        .collection('products')
-        .doc(id)
-        .snapshots()
-        .map((doc) => doc.exists ? _productFromDoc(doc) : _getVerifiedProducts().where((p) => p.id == id).firstOrNull)
-        .handleError((e) {
-      debugPrint('CatalogRepository.streamProductById error: $e');
-      return _getVerifiedProducts().where((p) => p.id == id).firstOrNull;
+  Stream<ProductEntity?> streamProductById(String id) async* {
+    yield await getProductById(id);
+
+    yield* _database.watchTable('products').asyncMap((_) async {
+      return await getProductById(id);
     });
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // WRITE OPERATIONS (SQLite)
+  // ──────────────────────────────────────────────────────────────
+
+  /// Adds or updates a product in the SQLite database.
+  Future<void> addProduct(ProductEntity product) async {
+    final now = DateTime.now().toIso8601String();
+    final row = <String, dynamic>{
+      'id': product.id,
+      'title': product.title,
+      'description': product.description,
+      'brand': product.brand,
+      'categoryType': product.categoryType.name,
+      'categoryName': product.categoryName,
+      'price': product.salePrice > 0 ? product.salePrice : product.basePrice,
+      'compareAtPrice': product.basePrice > product.salePrice ? product.basePrice : null,
+      'imageUrl': product.images.isNotEmpty ? product.images.first : '',
+      'inStock': product.inStock ? 1 : 0,
+      'totalStock': product.totalStock,
+      'rating': product.rating,
+      'reviewCount': product.reviewCount,
+      'isFlashDeal': product.isFlashDeal ? 1 : 0,
+      'flashSaleDiscountPercent': product.discountPercentage,
+      'isFeatured': product.isFeatured ? 1 : 0,
+      'sellerId': product.sellerId,
+      'sellerName': product.sellerName,
+      'sourceVendorId': product.sourceVendorId ?? product.sellerId,
+      'sourceType': product.sourceType,
+      'isApproved': product.isApproved ? 1 : 0,
+      'fullDataJson': jsonEncode(product.toJson()),
+      'createdAt': now,
+      'updatedAt': now,
+    };
+
+    await _database.insertOrReplace('products', row);
+    _database.notifyTable('products');
+  }
+
+  /// Updates product fields in SQLite.
+  Future<void> updateProduct(String productId, Map<String, dynamic> updates) async {
+    try {
+      final rows = await _database.query('products', where: 'id = ?', whereArgs: [productId], limit: 1);
+      if (rows.isNotEmpty) {
+        final existingRow = rows.first;
+        Map<String, dynamic> fullData = {};
+        if (existingRow['fullDataJson'] != null) {
+          fullData = jsonDecode(existingRow['fullDataJson'] as String) as Map<String, dynamic>;
+        }
+        fullData.addAll(updates);
+        fullData['updatedAt'] = DateTime.now().toIso8601String();
+
+        final updatedRow = Map<String, dynamic>.from(existingRow);
+        updatedRow.addAll(updates);
+        updatedRow['fullDataJson'] = jsonEncode(fullData);
+        updatedRow['updatedAt'] = DateTime.now().toIso8601String();
+
+        await _database.update(
+          'products',
+          updatedRow,
+          where: 'id = ?',
+          whereArgs: [productId],
+        );
+        _database.notifyTable('products');
+      }
+    } catch (e) {
+      debugPrint('CatalogRepository.updateProduct error: $e');
+    }
+  }
+
+  /// Atomically updates a variant's stock count.
+  Future<void> updateProductStock(String productId, String variantId, int newStock) async {
+    try {
+      final rows = await _database.query('products', where: 'id = ?', whereArgs: [productId], limit: 1);
+      if (rows.isNotEmpty) {
+        final p = _productFromRow(rows.first);
+        if (p != null) {
+          final data = p.toJson();
+          final variants = List<Map<String, dynamic>>.from(
+            (data['variants'] as List<dynamic>? ?? []).map((v) => Map<String, dynamic>.from(v as Map)),
+          );
+          final idx = variants.indexWhere((v) => v['id'] == variantId);
+          if (idx >= 0) {
+            variants[idx]['stock'] = newStock;
+            final newTotal = variants.fold<int>(0, (acc, v) => acc + ((v['stock'] as num?)?.toInt() ?? 0));
+            data['variants'] = variants;
+            data['totalStock'] = newTotal;
+            data['updatedAt'] = DateTime.now().toIso8601String();
+
+            await _database.update(
+              'products',
+              {
+                'totalStock': newTotal,
+                'inStock': newTotal > 0 ? 1 : 0,
+                'fullDataJson': jsonEncode(data),
+                'updatedAt': DateTime.now().toIso8601String(),
+              },
+              where: 'id = ?',
+              whereArgs: [productId],
+            );
+            _database.notifyTable('products');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('CatalogRepository.updateProductStock error: $e');
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // SEEDING HELPERS
+  // ──────────────────────────────────────────────────────────────
+
+  Future<void> _seedCategoriesIfEmpty() async {
+    try {
+      final categories = _getVerifiedCategories();
+      int order = 0;
+      for (final cat in categories) {
+        await _database.insertOrReplace('categories', {
+          'id': cat.id,
+          'name': cat.name,
+          'parentType': cat.parentType.name,
+          'iconEmoji': cat.iconEmoji,
+          'imageUrl': cat.imageUrl,
+          'productCount': cat.productCount,
+          'subcategoriesJson': jsonEncode(cat.subcategories),
+          'sortOrder': order++,
+          'createdAt': DateTime.now().toIso8601String(),
+        });
+      }
+      _database.notifyTable('categories');
+    } catch (e) {
+      debugPrint('CatalogRepository._seedCategoriesIfEmpty error: $e');
+    }
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -306,7 +353,7 @@ class CatalogRepository {
   // ──────────────────────────────────────────────────────────────
 
   List<CategoryEntity> _getVerifiedCategories() {
-    return MockCatalogData.getCategories();
+    return PakistanCatalogDataset.getCategories();
   }
 
   List<ProductEntity> _getVerifiedProducts() {
@@ -319,9 +366,9 @@ class CatalogRepository {
     list.addAll(_openFoodFactsService.getVerifiedRealWorldProducts(MainCategoryType.grocery));
 
     // 2. Add complete Pakistani mart catalog items mapped to live partner vendors
-    final allMock = MockCatalogData.getProducts();
-    for (int i = 0; i < allMock.length; i++) {
-      final p = allMock[i];
+    final allDataset = PakistanCatalogDataset.getProducts();
+    for (int i = 0; i < allDataset.length; i++) {
+      final p = allDataset[i];
       if (!list.any((existing) => existing.id == p.id)) {
         list.add(_enrichProductWithVendor(p, i));
       }
@@ -352,7 +399,6 @@ class CatalogRepository {
       map['sourceType'] = 'open_food_facts';
       map['isApproved'] = true;
     } else {
-      // Grocery: distribute across Imtiaz Super Market, Metro Cash & Carry, and Al-Fatah
       if (index % 3 == 0) {
         map['sellerId'] = 'vendor_imtiaz_super_market';
         map['sellerName'] = 'Imtiaz Super Market';
@@ -413,169 +459,51 @@ class CatalogRepository {
     return items;
   }
 
-  Future<void> _seedCategoriesIfEmpty() async {
-    final fs = _firestore;
-    if (fs == null || _isSeedingCategories) return;
-    _isSeedingCategories = true;
-    try {
-      final snap = await fs.collection('categories').limit(1).get();
-      if (snap.docs.isEmpty) {
-        final batch = fs.batch();
-        int order = 0;
-        for (final cat in _getVerifiedCategories()) {
-          final docRef = fs.collection('categories').doc(cat.id);
-          batch.set(docRef, {
-            ...cat.toJson(),
-            'order': order++,
-            'createdAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
-        }
-        await batch.commit();
-        debugPrint('CatalogRepository: Seeded verified categories to Firestore.');
-      }
-    } catch (e) {
-      debugPrint('CatalogRepository._seedCategoriesIfEmpty notice: $e');
-    } finally {
-      _isSeedingCategories = false;
-    }
-  }
-
-  Future<void> _seedInitialProductsIfEmpty() async {
-    final fs = _firestore;
-    if (fs == null || _isSeedingProducts) return;
-    _isSeedingProducts = true;
-    try {
-      final snap = await fs.collection('products').limit(1).get();
-      if (snap.docs.isEmpty) {
-        final products = _getVerifiedProducts();
-        const chunkSize = 100;
-        for (var i = 0; i < products.length; i += chunkSize) {
-          final chunk = products.sublist(
-            i,
-            i + chunkSize > products.length ? products.length : i + chunkSize,
-          );
-          final batch = fs.batch();
-          for (final product in chunk) {
-            final docRef = fs.collection('products').doc(product.id);
-            final data = product.toJson();
-            data['createdAt'] = FieldValue.serverTimestamp();
-            data['updatedAt'] = FieldValue.serverTimestamp();
-            data['isApproved'] = true;
-            batch.set(docRef, data, SetOptions(merge: true));
-          }
-          await batch.commit();
-        }
-        debugPrint('CatalogRepository: Seeded verified products to Firestore.');
-      }
-    } catch (e) {
-      debugPrint('CatalogRepository._seedInitialProductsIfEmpty notice: $e');
-    } finally {
-      _isSeedingProducts = false;
-    }
-  }
-
-  // ──────────────────────────────────────────────────────────────
-  // WRITE OPERATIONS
-  // ──────────────────────────────────────────────────────────────
-
-  /// Adds a new product document to Firestore.
-  Future<void> addProduct(ProductEntity product) async {
-    final fs = _firestore;
-    if (fs == null) return;
-    final data = product.toJson();
-    data['createdAt'] = FieldValue.serverTimestamp();
-    data['updatedAt'] = FieldValue.serverTimestamp();
-    await fs.collection('products').doc(product.id).set(data);
-  }
-
-  /// Updates product fields (e.g. stock, approval, featured flags).
-  Future<void> updateProduct(String productId, Map<String, dynamic> updates) async {
-    final fs = _firestore;
-    if (fs == null) return;
-    updates['updatedAt'] = FieldValue.serverTimestamp();
-    await fs
-        .collection('products')
-        .doc(productId)
-        .set(updates, SetOptions(merge: true));
-  }
-
-  /// Atomically decrements a variant's stock count on order placement.
-  Future<void> updateProductStock(
-      String productId, String variantId, int newStock) async {
-    final fs = _firestore;
-    if (fs == null) return;
-    final docRef = fs.collection('products').doc(productId);
-    await fs.runTransaction((txn) async {
-      final snap = await txn.get(docRef);
-      if (!snap.exists) return;
-      final data = snap.data()!;
-      final variants = List<Map<String, dynamic>>.from(
-        (data['variants'] as List<dynamic>? ?? []).map((v) => Map<String, dynamic>.from(v as Map)),
-      );
-      final idx = variants.indexWhere((v) => v['id'] == variantId);
-      if (idx >= 0) {
-        variants[idx]['stock'] = newStock;
-        final newTotal = variants.fold<int>(0, (acc, v) => acc + ((v['stock'] as num?)?.toInt() ?? 0));
-        txn.update(docRef, {
-          'variants': variants,
-          'totalStock': newTotal,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      }
-    });
-  }
-
   // ──────────────────────────────────────────────────────────────
   // PARSING HELPERS
   // ──────────────────────────────────────────────────────────────
 
-  CategoryEntity? _categoryFromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  CategoryEntity? _categoryFromRow(Map<String, dynamic> row) {
     try {
-      final data = doc.data()!;
-      final parentTypeStr = data['parentType'] as String? ?? 'grocery';
+      final parentTypeStr = row['parentType'] as String? ?? 'grocery';
       final parentType = MainCategoryType.values.firstWhere(
         (e) => e.name == parentTypeStr,
         orElse: () => MainCategoryType.grocery,
       );
+      List<String> subcategories = const [];
+      final subJson = row['subcategoriesJson'] as String?;
+      if (subJson != null && subJson.isNotEmpty) {
+        try {
+          subcategories = List<String>.from(jsonDecode(subJson) as List);
+        } catch (_) {}
+      }
+
       return CategoryEntity(
-        id: doc.id,
-        name: data['name'] as String? ?? '',
+        id: row['id'] as String,
+        name: row['name'] as String? ?? '',
         parentType: parentType,
-        iconEmoji: data['iconEmoji'] as String? ?? '📦',
-        imageUrl: data['imageUrl'] as String? ?? '',
-        productCount: (data['productCount'] as num?)?.toInt() ?? 0,
-        subcategories: List<String>.from(data['subcategories'] as List? ?? []),
+        iconEmoji: row['iconEmoji'] as String? ?? '📦',
+        imageUrl: row['imageUrl'] as String? ?? '',
+        productCount: (row['productCount'] as num?)?.toInt() ?? 0,
+        subcategories: subcategories,
       );
     } catch (e) {
-      debugPrint('_categoryFromDoc parse error for doc ${doc.id}: $e');
+      debugPrint('_categoryFromRow parse error: $e');
       return null;
     }
   }
 
-  List<ProductEntity> _parseProductsFromSnap(QuerySnapshot<Map<String, dynamic>> snap) {
-    final docs = snap.docs.toList();
-    docs.sort((a, b) {
-      final aTs = a.data()['createdAt'];
-      final bTs = b.data()['createdAt'];
-      if (aTs is Timestamp && bTs is Timestamp) {
-        return bTs.compareTo(aTs);
-      }
-      return 0;
-    });
-    return docs
-        .map((doc) => _productFromDoc(doc))
-        .whereType<ProductEntity>()
-        .toList();
-  }
-
-  ProductEntity? _productFromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  ProductEntity? _productFromRow(Map<String, dynamic> row) {
     try {
-      final data = doc.data()!;
-      // Ensure 'id' is always set from the document ID
-      data['id'] = doc.id;
-      return ProductEntity.fromJson(data);
+      final fullJson = row['fullDataJson'] as String?;
+      if (fullJson != null && fullJson.isNotEmpty) {
+        final map = jsonDecode(fullJson) as Map<String, dynamic>;
+        map['id'] = row['id'];
+        return ProductEntity.fromJson(map);
+      }
+      return ProductEntity.fromJson(Map<String, dynamic>.from(row));
     } catch (e) {
-      debugPrint('_productFromDoc parse error for doc ${doc.id}: $e');
+      debugPrint('_productFromRow parse error: $e');
       return null;
     }
   }

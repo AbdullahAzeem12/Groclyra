@@ -106,6 +106,8 @@ class OrderEntity {
   final DateTime createdAt;
   final DateTime estimatedDelivery;
   final String? customerOtp;
+  final double? customerLat;
+  final double? customerLng;
 
   const OrderEntity({
     required this.id,
@@ -123,6 +125,8 @@ class OrderEntity {
     required this.createdAt,
     required this.estimatedDelivery,
     this.customerOtp = '4829',
+    this.customerLat,
+    this.customerLng,
   });
 
   int get totalItemCount => subOrders.fold<int>(
@@ -149,6 +153,8 @@ class OrderEntity {
         'createdAt': createdAt.toIso8601String(),
         'estimatedDelivery': estimatedDelivery.toIso8601String(),
         'customerOtp': customerOtp,
+        'customerLat': customerLat,
+        'customerLng': customerLng,
       };
 
   factory OrderEntity.fromJson(Map<String, dynamic> json) => OrderEntity(
@@ -170,5 +176,7 @@ class OrderEntity {
         estimatedDelivery: DateTime.tryParse(json['estimatedDelivery'] ?? '') ??
             DateTime.now().add(const Duration(days: 2)),
         customerOtp: json['customerOtp'] ?? '4829',
+        customerLat: (json['customerLat'] as num?)?.toDouble(),
+        customerLng: (json['customerLng'] as num?)?.toDouble(),
       );
 }

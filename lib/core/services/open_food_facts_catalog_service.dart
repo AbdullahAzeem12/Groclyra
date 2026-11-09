@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:groclyra/core/database/app_database.dart';
 import '../../features/catalog/domain/entities/category_entity.dart';
 import '../../features/catalog/domain/entities/product_entity.dart';
 
@@ -12,22 +12,14 @@ import '../../features/catalog/domain/entities/product_entity.dart';
 /// beverages, and packaged goods with real barcodes, ingredients, and nutrition facts.
 class OpenFoodFactsCatalogService {
   final http.Client _httpClient;
-  final FirebaseFirestore? _firestore;
+  final AppDatabase _database;
 
   OpenFoodFactsCatalogService({
     http.Client? httpClient,
-    FirebaseFirestore? firestore,
+    dynamic firestore, // Kept for legacy test compatibility
+    AppDatabase? database,
   })  : _httpClient = httpClient ?? http.Client(),
-        _firestore = firestore;
-
-  FirebaseFirestore? get _db {
-    if (_firestore != null) return _firestore;
-    try {
-      return FirebaseFirestore.instance;
-    } catch (_) {
-      return null;
-    }
-  }
+        _database = database ?? AppDatabase.instance;
 
   static const String _baseUrl = 'https://world.openfoodfacts.org/api/v2/search';
   static const Map<String, String> _headers = {
@@ -81,15 +73,12 @@ class OpenFoodFactsCatalogService {
     return _getVerifiedRealWorldProducts(categoryType);
   }
 
-  /// Syncs live products to Firestore collection 'products' and staging collection 'vendorCatalogItems'
+  /// Syncs live products to SQLite products table
   Future<int> syncCategoryToFirestore({
     required MainCategoryType categoryType,
     int count = 15,
     String? integrationId,
   }) async {
-    final db = _db;
-    if (db == null) return 0;
-
     final products = await fetchLiveProducts(
       categoryType: categoryType,
       pageSize: count,
@@ -97,33 +86,43 @@ class OpenFoodFactsCatalogService {
 
     if (products.isEmpty) return 0;
 
-    final batch = db.batch();
     int syncedCount = 0;
+    final now = DateTime.now().toIso8601String();
 
     for (final p in products) {
-      final docRef = db.collection('products').doc(p.id);
-      final data = p.toJson();
-      data['createdAt'] = FieldValue.serverTimestamp();
-      data['updatedAt'] = FieldValue.serverTimestamp();
-      data['isApproved'] = true;
-      batch.set(docRef, data, SetOptions(merge: true));
+      final row = <String, dynamic>{
+        'id': p.id,
+        'title': p.title,
+        'description': p.description,
+        'brand': p.brand,
+        'categoryType': p.categoryType.name,
+        'categoryName': p.categoryName,
+        'price': p.salePrice > 0 ? p.salePrice : p.basePrice,
+        'compareAtPrice': p.basePrice > p.salePrice ? p.basePrice : null,
+        'imageUrl': p.images.isNotEmpty ? p.images.first : '',
+        'inStock': p.inStock ? 1 : 0,
+        'totalStock': p.totalStock,
+        'rating': p.rating,
+        'reviewCount': p.reviewCount,
+        'isFlashDeal': p.isFlashDeal ? 1 : 0,
+        'flashSaleDiscountPercent': p.discountPercentage,
+        'isFeatured': p.isFeatured ? 1 : 0,
+        'sellerId': p.sellerId,
+        'sellerName': p.sellerName,
+        'sourceVendorId': integrationId ?? p.sourceVendorId ?? p.sellerId,
+        'sourceType': p.sourceType,
+        'isApproved': 1,
+        'fullDataJson': jsonEncode(p.toJson()),
+        'createdAt': now,
+        'updatedAt': now,
+      };
 
-      // Also record in staging catalog for vendor auditability
-      final stageId = '${integrationId ?? p.sourceStoreId ?? "off"}_${p.sourceProductId ?? p.id}';
-      final stageRef = db.collection('vendorCatalogItems').doc(stageId);
-      batch.set(stageRef, {
-        ...data,
-        'id': stageId,
-        'sourceStoreId': integrationId ?? p.sourceStoreId,
-        'stagedAt': FieldValue.serverTimestamp(),
-        'sourceProvider': 'openFoodFacts',
-      }, SetOptions(merge: true));
-
+      await _database.insertOrReplace('products', row);
       syncedCount++;
     }
 
-    await batch.commit();
-    debugPrint('OpenFoodFacts: Committed $syncedCount live products to Firestore for ${categoryType.name}');
+    _database.notifyTable('products');
+    debugPrint('OpenFoodFacts: Committed $syncedCount live products to SQLite for ${categoryType.name}');
     return syncedCount;
   }
 

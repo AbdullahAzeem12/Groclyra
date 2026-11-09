@@ -1,11 +1,11 @@
 import 'dart:convert';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
+import 'package:groclyra/core/database/app_database.dart';
 import 'package:pointycastle/block/aes.dart';
 import 'package:pointycastle/block/modes/ecb.dart';
 import 'package:pointycastle/padded_block_cipher/padded_block_cipher_impl.dart';
@@ -231,8 +231,9 @@ class EasypaisaHasher {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class PaymentService {
-  static final FirebaseFirestore _db = FirebaseFirestore.instance;
+  static final AppDatabase _db = AppDatabase.instance;
   static final FirebaseAuth _auth = FirebaseAuth.instance;
+  static final Map<String, Map<String, dynamic>> _txnMemory = {};
 
   /// UID of the signed-in user initiating the payment (empty string when
   /// unauthenticated). Stamped onto `paymentTransactions` docs so the
@@ -671,7 +672,7 @@ class PaymentService {
             'gatewayStatus': result.gatewayStatus,
             'gatewayTransactionId': result.transactionId,
             'responseCode': 'PAID',
-            'paidAt': FieldValue.serverTimestamp(),
+            'paidAt': DateTime.now().toIso8601String(),
             'verifiedVia': 'statusInquiry',
             'inquiryMeta': data,
           });
@@ -717,25 +718,38 @@ class PaymentService {
   // 4) VERIFICATION & ORDER LIFECYCLE
   // ═════════════════════════════════════════════════════════════════════════
 
-  /// Looks up the locally recorded transaction state (the authoritative
-  /// gateway truth lives in the gateway; Firestore mirrors it for history).
+  /// Looks up recorded transaction state from SQLite
   static Future<PaymentVerifyResult> verifyPayment(String txnRefNo) async {
     try {
-      final doc =
-          await _db.collection('paymentTransactions').doc(txnRefNo).get();
-      if (!doc.exists) {
+      if (_txnMemory.containsKey(txnRefNo)) {
+        final data = _txnMemory[txnRefNo]!;
+        final paid = data['status'] == 'paid';
+        return PaymentVerifyResult(
+          paid: paid,
+          txnRefNo: txnRefNo,
+          responseCode: data['responseCode'] as String?,
+          responseMessage: data['responseMessage'] as String?,
+        );
+      }
+      final rows = await _db.query(
+        'system_telemetry',
+        where: 'id = ?',
+        whereArgs: [txnRefNo],
+        limit: 1,
+      );
+      if (rows.isEmpty) {
         return const PaymentVerifyResult(
           paid: false,
           responseMessage: 'Transaction not found.',
         );
       }
-      final data = doc.data()!;
-      final paid = data['status'] == 'paid';
+      final tags = jsonDecode(rows.first['tagsJson']?.toString() ?? '{}') as Map<String, dynamic>;
+      final paid = tags['status'] == 'paid';
       return PaymentVerifyResult(
         paid: paid,
         txnRefNo: txnRefNo,
-        responseCode: data['responseCode'] as String?,
-        responseMessage: data['responseMessage'] as String?,
+        responseCode: tags['responseCode'] as String?,
+        responseMessage: tags['responseMessage'] as String?,
       );
     } catch (e) {
       debugPrint('PaymentService.verifyPayment error: $e');
@@ -746,51 +760,63 @@ class PaymentService {
     }
   }
 
-  /// Marks the order PAID — only call once the gateway has CONFIRMED money.
-  /// (Guarded by Firestore rules: customers may write only these fields.)
+  /// Marks the order PAID in SQLite
   static Future<void> markOrderAsPaid(String orderId, String txnRefNo) async {
     try {
-      await _db.collection('orders').doc(orderId).update({
-        'paymentStatus': 'paid',
-        'paymentTxnRef': txnRefNo,
-        'paidAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      final now = DateTime.now().toIso8601String();
+      await _db.update(
+        'orders',
+        {
+          'status': 'paid',
+          'updatedAt': now,
+        },
+        where: 'id = ?',
+        whereArgs: [orderId],
+      );
+      _db.notifyTable('orders');
     } catch (e) {
       debugPrint('PaymentService.markOrderAsPaid error: $e');
       rethrow;
     }
   }
 
-  /// Marks the order payment as definitively FAILED (customer may retry or
-  /// switch to Cash on Delivery). Additive to the legacy behaviour which
-  /// simply left the order hanging in 'pending'.
+  /// Marks the order payment as definitively FAILED in SQLite
   static Future<void> markOrderPaymentFailed(String orderId) async {
     try {
-      await _db.collection('orders').doc(orderId).update({
-        'paymentStatus': 'failed',
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      await _db.update(
+        'orders',
+        {
+          'status': 'cancelled',
+          'updatedAt': DateTime.now().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [orderId],
+      );
+      _db.notifyTable('orders');
     } catch (e) {
       debugPrint('PaymentService.markOrderPaymentFailed error: $e');
     }
   }
 
-  /// Opened hosted checkout / awaiting gateway — order shows
-  /// "Payment in progress" instead of sitting silently in 'pending'.
+  /// Opened hosted checkout / awaiting gateway in SQLite
   static Future<void> markOrderAwaitingVerification(String orderId) async {
     try {
-      await _db.collection('orders').doc(orderId).update({
-        'paymentStatus': 'awaiting_verification',
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      await _db.update(
+        'orders',
+        {
+          'updatedAt': DateTime.now().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [orderId],
+      );
+      _db.notifyTable('orders');
     } catch (e) {
       debugPrint('PaymentService.markOrderAwaitingVerification error: $e');
     }
   }
 
   // ═════════════════════════════════════════════════════════════════════════
-  // 5) TRANSACTION RECORDS (Firestore mirror + audit trail)
+  // 5) TRANSACTION RECORDS (SQLite + in-memory cache)
   // ═════════════════════════════════════════════════════════════════════════
 
   static Future<void> _recordTransaction({
@@ -804,7 +830,7 @@ class PaymentService {
     Map<String, dynamic>? extra,
   }) async {
     try {
-      await _db.collection('paymentTransactions').doc(txnRefNo).set({
+      final data = {
         'txnRefNo': txnRefNo,
         'orderId': orderId,
         'gateway': gateway,
@@ -814,8 +840,18 @@ class PaymentService {
         'status': status,
         'userId': _currentUserUid(),
         if (extra != null) ...extra,
-        'createdAt': FieldValue.serverTimestamp(),
+        'createdAt': DateTime.now().toIso8601String(),
+      };
+      _txnMemory[txnRefNo] = data;
+
+      await _db.insertOrReplace('system_telemetry', {
+        'id': txnRefNo,
+        'metricName': 'payment_transaction',
+        'metricValue': amount,
+        'tagsJson': jsonEncode(data),
+        'recordedAt': DateTime.now().toIso8601String(),
       });
+      _db.notifyTable('system_telemetry');
     } catch (e) {
       debugPrint('PaymentService._recordTransaction notice: $e');
     }
@@ -851,10 +887,19 @@ class PaymentService {
   static Future<void> _updateTransaction(
       String txnRefNo, Map<String, dynamic> patch) async {
     try {
-      await _db
-          .collection('paymentTransactions')
-          .doc(txnRefNo)
-          .update({...patch, 'updatedAt': FieldValue.serverTimestamp()});
+      if (_txnMemory.containsKey(txnRefNo)) {
+        _txnMemory[txnRefNo]!.addAll(patch);
+      }
+      await _db.update(
+        'system_telemetry',
+        {
+          'tagsJson': jsonEncode(_txnMemory[txnRefNo] ?? patch),
+          'recordedAt': DateTime.now().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [txnRefNo],
+      );
+      _db.notifyTable('system_telemetry');
     } catch (e) {
       debugPrint('PaymentService._updateTransaction notice: $e');
     }

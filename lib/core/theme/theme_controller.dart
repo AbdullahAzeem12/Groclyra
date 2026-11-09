@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -65,52 +64,7 @@ class ThemeController extends StateNotifier<ThemeState> {
   }
 
   Future<void> syncFromCloud(String uid) async {
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('settings')
-          .doc('theme')
-          .get();
-      if (doc.exists && doc.data() != null) {
-        final data = doc.data()!;
-        final paletteName = data['palette'] as String?;
-        final modeName = data['mode'] as String?;
-
-        AppThemePalette? cloudPalette;
-        if (paletteName != null) {
-          try {
-            cloudPalette = AppThemePalette.values.firstWhere((p) => p.name == paletteName);
-          } catch (_) {}
-        }
-
-        ThemeMode? cloudMode;
-        if (modeName != null) {
-          switch (modeName) {
-            case 'dark':
-              cloudMode = ThemeMode.dark;
-              break;
-            case 'light':
-              cloudMode = ThemeMode.light;
-              break;
-            case 'system':
-              cloudMode = ThemeMode.system;
-              break;
-          }
-        }
-
-        if (cloudPalette != null || cloudMode != null) {
-          state = state.copyWith(
-            palette: cloudPalette ?? state.palette,
-            mode: cloudMode ?? state.mode,
-          );
-          if (cloudPalette != null) _prefs?.setThemePalette(cloudPalette);
-          if (cloudMode != null) _prefs?.setThemeMode(cloudMode);
-        }
-      }
-    } catch (_) {
-      // Offline or network error - local preference takes precedence safely
-    }
+    // Theme is loaded locally from persistent SharedPreferences
   }
 
   void setPalette(AppThemePalette palette) {
@@ -131,23 +85,7 @@ class ThemeController extends StateNotifier<ThemeState> {
   }
 
   Future<void> _syncToCloud() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('settings')
-            .doc('theme')
-            .set({
-          'palette': state.palette.name,
-          'mode': state.mode.name,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      }
-    } catch (_) {
-      // Silently tolerate if offline, permission denied, or Firebase uninitialized in test
-    }
+    // Theme is synced locally to persistent SharedPreferences
   }
 }
 

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_dimensions.dart';
 import '../../../../core/services/rate_limit_service.dart';
+import '../../../../core/services/biometric_auth_service.dart';
 import '../../../../core/theme/theme_controller.dart';
 import '../../../../core/utils/validator_utils.dart';
 import '../../../../routing/route_names.dart';
@@ -149,6 +150,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           _emailController.text.trim(),
           _passwordController.text,
         );
+        await ref.read(biometricAuthProvider.notifier).saveBiometricSession(
+          email: _emailController.text.trim(),
+          role: _selectedRole.name,
+        );
       } else {
         await ref.read(secureStorageServiceProvider).clearCredentials(_emailController.text.trim());
       }
@@ -158,6 +163,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       context.go(RouteNames.accountPending);
     } else if (result.requiresEmailVerification) {
       context.go(RouteNames.emailVerification);
+    }
+  }
+
+  Future<void> _handleBiometricLogin() async {
+    final bioNotifier = ref.read(biometricAuthProvider.notifier);
+    final bioState = ref.read(biometricAuthProvider);
+
+    final success = await bioNotifier.authenticateWithBiometrics(
+      reason: 'Scan your fingerprint or face to sign in as ${_selectedRole.displayName}',
+    );
+
+    if (success && mounted) {
+      final email = bioState.enrolledEmail ?? _emailController.text.trim();
+      final result = await ref.read(authControllerProvider.notifier).signInWithBiometricVault(
+        email: email,
+        role: _selectedRole,
+      );
+      if (result.isSuccess && mounted) {
+        _navigateByRole(_selectedRole);
+      }
     }
   }
 
@@ -575,6 +600,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final themeState = ref.watch(themeControllerProvider);
     final authState = ref.watch(authControllerProvider);
+    final bioState = ref.watch(biometricAuthProvider);
     final palette = themeState.palette;
     final effectiveIsDark = Theme.of(context).brightness == Brightness.dark;
     final isDark = effectiveIsDark;
@@ -815,6 +841,56 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                           ],
                         ),
+
+                        // Biometric Quick Login Button
+                        if (bioState.isSupported) ...[
+                          const SizedBox(height: AppDimensions.p12),
+                          SpringTouchScale(
+                            onTap: _handleBiometricLogin,
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? const Color(0xFF161E2E)
+                                    : Colors.white,
+                                borderRadius: BorderRadius.circular(AppDimensions.radiusMedium),
+                                border: Border.all(
+                                  color: palette.primaryColor.withValues(alpha: 0.4),
+                                  width: 1.2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: palette.primaryColor.withValues(alpha: 0.12),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    bioState.hasFaceId
+                                        ? Icons.face_unlock_rounded
+                                        : Icons.fingerprint_rounded,
+                                    color: palette.primaryColor,
+                                    size: 24,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    'Biometric Quick Sign In (${_selectedRole.displayName})',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      color: isDark ? Colors.white : Colors.black87,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: AppDimensions.p24),
 
                         // Switch to Register (if not admin) or General Switch

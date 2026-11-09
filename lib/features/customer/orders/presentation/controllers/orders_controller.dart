@@ -59,6 +59,8 @@ class OrdersController extends StateNotifier<OrdersState> {
     required List<CartItemEntity> items,
     required double discountAmount,
     required PaymentMethod paymentMethod,
+    double? customerLat,
+    double? customerLng,
   }) async {
     state = state.copyWith(isLoading: true);
     try {
@@ -70,6 +72,8 @@ class OrdersController extends StateNotifier<OrdersState> {
         items: items,
         discountAmount: discountAmount,
         paymentMethod: paymentMethod,
+        customerLat: customerLat,
+        customerLng: customerLng,
       );
 
       state = state.copyWith(

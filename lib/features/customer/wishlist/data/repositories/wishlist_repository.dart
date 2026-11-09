@@ -1,29 +1,22 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:groclyra/core/database/app_database.dart';
 import 'package:groclyra/features/catalog/domain/entities/category_entity.dart';
 import 'package:groclyra/features/customer/wishlist/domain/entities/wishlist_item_entity.dart';
 
-
+/// Groclyra SQL-backed WishlistRepository (SQLite).
 class WishlistRepository {
-  final FirebaseFirestore? _explicitFirestore;
+  final AppDatabase _database;
   final List<WishlistItemEntity> _memoryCache = [];
 
-  WishlistRepository({FirebaseFirestore? firestore})
-      : _explicitFirestore = firestore {
+  WishlistRepository({
+    dynamic firestore, // Kept dynamic for legacy test compatibility
+    AppDatabase? database,
+  })  : _database = database ?? AppDatabase.instance {
     _seedDefaultItemsIfEmpty();
   }
-
-  FirebaseFirestore? get _firestore {
-    if (_explicitFirestore != null) return _explicitFirestore;
-    try {
-      return FirebaseFirestore.instance;
-    } catch (_) {
-      return null;
-    }
-  }
-
 
   void _seedDefaultItemsIfEmpty() {
     if (_memoryCache.isEmpty) {
@@ -86,92 +79,100 @@ class WishlistRepository {
     }
   }
 
-  /// Real-time stream of all wishlist items for this user
-  Stream<List<WishlistItemEntity>> streamWishlist(String userId) {
-    if (userId.isEmpty) {
-      return Stream.value(List.unmodifiable(_memoryCache));
-    }
+  /// Real-time stream of all wishlist items for this user from SQLite.
+  Stream<List<WishlistItemEntity>> streamWishlist(String userId) async* {
+    yield await getWishlist(userId: userId);
 
-    final fs = _firestore;
-    if (fs == null) {
-      return Stream.value(List.unmodifiable(_memoryCache));
-    }
-
-    try {
-      return fs
-          .collection('users')
-          .doc(userId)
-          .collection('wishlist')
-          .orderBy('savedAt', descending: true)
-          .snapshots()
-          .map<List<WishlistItemEntity>>((snap) {
-        if (snap.docs.isEmpty) {
-          return List.unmodifiable(_memoryCache);
-        }
-        final list = snap.docs
-            .map((doc) => WishlistItemEntity.fromMap(doc.data(), doc.id))
-            .toList();
-        _memoryCache.clear();
-        _memoryCache.addAll(list);
-        return list;
-      });
-
-    } catch (_) {
-      return Stream.value(List.unmodifiable(_memoryCache));
-    }
+    yield* _database.watchTable('wishlist').asyncMap((_) async {
+      return await getWishlist(userId: userId);
+    });
   }
 
   Future<void> addItem(WishlistItemEntity item) async {
     _memoryCache.removeWhere((w) => w.id == item.id || w.productId == item.productId);
     _memoryCache.insert(0, item);
 
-    final fs = _firestore;
-    if (item.userId.isNotEmpty && fs != null) {
-      try {
-        await fs
-            .collection('users')
-            .doc(item.userId)
-            .collection('wishlist')
-            .doc(item.id)
-            .set(item.toMap(), SetOptions(merge: true));
-      } catch (e) {
-        debugPrint('WishlistRepository.addItem error: $e');
-      }
+    try {
+      final row = <String, dynamic>{
+        'id': item.id,
+        'userId': item.userId,
+        'productId': item.productId,
+        'title': item.title,
+        'brand': item.brand,
+        'imageUrl': item.imageUrl,
+        'savedPrice': item.savedPrice,
+        'currentPrice': item.currentPrice,
+        'collectionName': item.collectionName,
+        'savedAt': item.savedAt.toIso8601String(),
+        'fullDataJson': jsonEncode(item.toMap()),
+      };
+      await _database.insertOrReplace('wishlist', row);
+      _database.notifyTable('wishlist');
+    } catch (e) {
+      debugPrint('WishlistRepository.addItem error: $e');
     }
   }
 
   Future<void> removeItem(String userId, String itemId) async {
-    _memoryCache.removeWhere((w) => w.id == itemId);
+    _memoryCache.removeWhere((w) => w.id == itemId || (w.userId == userId && w.productId == itemId));
 
-    final fs = _firestore;
-    if (userId.isNotEmpty && fs != null) {
-      try {
-        await fs
-            .collection('users')
-            .doc(userId)
-            .collection('wishlist')
-            .doc(itemId)
-            .delete();
-      } catch (e) {
-        debugPrint('WishlistRepository.removeItem error: $e');
-      }
+    try {
+      await _database.delete(
+        'wishlist',
+        where: 'id = ? OR (userId = ? AND productId = ?)',
+        whereArgs: [itemId, userId, itemId],
+      );
+      _database.notifyTable('wishlist');
+    } catch (e) {
+      debugPrint('WishlistRepository.removeItem error: $e');
     }
   }
 
-
   Future<List<WishlistItemEntity>> getWishlist({required String userId}) async {
-    return List.unmodifiable(_memoryCache);
+    if (userId.isEmpty || userId == 'usr_guest') {
+      return List.unmodifiable(_memoryCache);
+    }
+
+    try {
+      final rows = await _database.query(
+        'wishlist',
+        where: 'userId = ?',
+        whereArgs: [userId],
+        orderBy: 'savedAt DESC',
+      );
+
+      if (rows.isEmpty) {
+        return List.unmodifiable(_memoryCache);
+      }
+
+      final list = rows.map((r) {
+        final full = r['fullDataJson'] as String?;
+        if (full != null && full.isNotEmpty) {
+          try {
+            return WishlistItemEntity.fromMap(jsonDecode(full) as Map<String, dynamic>, r['id'] as String);
+          } catch (_) {}
+        }
+        return WishlistItemEntity.fromMap(r, r['id'] as String);
+      }).toList();
+
+      _memoryCache.clear();
+      _memoryCache.addAll(list);
+      return List.unmodifiable(list);
+    } catch (e) {
+      debugPrint('WishlistRepository.getWishlist error: $e');
+      return List.unmodifiable(_memoryCache);
+    }
   }
 
   Future<void> addToWishlist(WishlistItemEntity item) => addItem(item);
 
-  Future<void> removeFromWishlist({required String userId, required String itemId}) => removeItem(userId, itemId);
+  Future<void> removeFromWishlist({required String userId, required String itemId}) =>
+      removeItem(userId, itemId);
 
   bool isProductWishlisted(String productId) {
     return _memoryCache.any((w) => w.productId == productId);
   }
 }
-
 
 final wishlistRepositoryProvider = Provider<WishlistRepository>((ref) {
   return WishlistRepository();

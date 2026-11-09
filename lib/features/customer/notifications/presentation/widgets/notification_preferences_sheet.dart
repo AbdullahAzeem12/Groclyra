@@ -1,7 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:groclyra/core/constants/app_dimensions.dart';
+import 'package:groclyra/core/database/app_database.dart';
 import 'package:groclyra/core/theme/theme_controller.dart';
 import 'package:groclyra/features/auth/presentation/controllers/auth_controller.dart';
 
@@ -41,18 +42,23 @@ class _NotificationPreferencesSheetState extends ConsumerState<NotificationPrefe
     final uid = auth.user?.id;
     if (uid != null && uid.isNotEmpty) {
       try {
-        final doc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .collection('notificationPreferences')
-            .doc('settings')
-            .get();
-        if (doc.exists && doc.data() != null) {
-          setState(() {
-            _prefs = NotificationPreferencesEntity.fromMap(doc.data()!);
-            _isLoading = false;
-          });
-          return;
+        final rows = await AppDatabase.instance.query(
+          'notification_preferences',
+          where: 'userId = ?',
+          whereArgs: [uid],
+          limit: 1,
+        );
+        if (rows.isNotEmpty) {
+          final row = rows.first;
+          final jsonStr = row['preferencesJson'] as String?;
+          if (jsonStr != null && jsonStr.isNotEmpty) {
+            final map = jsonDecode(jsonStr) as Map<String, dynamic>;
+            setState(() {
+              _prefs = NotificationPreferencesEntity.fromMap(map);
+              _isLoading = false;
+            });
+            return;
+          }
         }
       } catch (_) {}
     }
@@ -65,12 +71,12 @@ class _NotificationPreferencesSheetState extends ConsumerState<NotificationPrefe
     final uid = auth.user?.id;
     if (uid != null && uid.isNotEmpty) {
       try {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .collection('notificationPreferences')
-            .doc('settings')
-            .set(updated.toMap(), SetOptions(merge: true));
+        await AppDatabase.instance.insertOrReplace('notification_preferences', {
+          'userId': uid,
+          'preferencesJson': jsonEncode(updated.toMap()),
+          'updatedAt': DateTime.now().toIso8601String(),
+        });
+        AppDatabase.instance.notifyTable('notification_preferences');
       } catch (_) {}
     }
   }

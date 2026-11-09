@@ -1,28 +1,21 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:groclyra/core/database/app_database.dart';
 import 'package:groclyra/features/customer/addresses/domain/entities/delivery_address_entity.dart';
 import 'package:groclyra/features/customer/addresses/domain/services/delivery_serviceability_engine.dart';
 
+/// Groclyra SQL-backed AddressRepository (SQLite)
 class AddressRepository {
-  final FirebaseFirestore? _explicitFirestore;
+  final AppDatabase _database;
   final List<DeliveryAddressEntity> _localMemoryCache = [];
   final StreamController<List<DeliveryAddressEntity>> _localStreamController =
       StreamController<List<DeliveryAddressEntity>>.broadcast();
 
-  AddressRepository({FirebaseFirestore? firestore})
-      : _explicitFirestore = firestore;
-
-  FirebaseFirestore? get _firestore {
-    if (_explicitFirestore != null) return _explicitFirestore;
-    try {
-      return FirebaseFirestore.instance;
-    } catch (_) {
-      return null;
-    }
-  }
+  AddressRepository({dynamic firestore, AppDatabase? database})
+      : _database = database ?? AppDatabase.instance;
 
   String _resolveEffectiveUserId(String requestedUserId) {
     if (requestedUserId.isNotEmpty && requestedUserId != 'usr_guest') {
@@ -37,50 +30,47 @@ class AddressRepository {
     return requestedUserId.isNotEmpty ? requestedUserId : 'usr_guest';
   }
 
-  /// Real-time stream of all saved delivery addresses for the user.
-  /// Does NOT use composite indexes, avoiding any index failure in Firestore.
+  /// Real-time stream of all saved delivery addresses for the user from SQLite.
   Stream<List<DeliveryAddressEntity>> streamAddresses(String userId) async* {
     final effectiveUserId = _resolveEffectiveUserId(userId);
-    yield List<DeliveryAddressEntity>.unmodifiable(_localMemoryCache);
+    yield await getAddresses(effectiveUserId);
 
-    if (effectiveUserId.isEmpty || effectiveUserId == 'usr_guest' || _firestore == null) {
-      yield* _localStreamController.stream;
-      return;
-    }
+    yield* _database.watchTable('addresses').asyncMap((_) async {
+      return await getAddresses(effectiveUserId);
+    });
+  }
 
+  /// One-shot fetch of addresses for user from SQLite
+  Future<List<DeliveryAddressEntity>> getAddresses(String userId) async {
+    final effectiveUserId = _resolveEffectiveUserId(userId);
     try {
-      yield* _firestore!
-          .collection('users')
-          .doc(effectiveUserId)
-          .collection('addresses')
-          .snapshots()
-          .map<List<DeliveryAddressEntity>>((snap) {
-        final list = snap.docs
-            .map((doc) => DeliveryAddressEntity.fromMap(doc.data(), doc.id))
-            .toList();
+      final rows = await _database.query(
+        'addresses',
+        where: 'userId = ?',
+        whereArgs: [effectiveUserId],
+        orderBy: 'isDefault DESC, createdAt DESC',
+      );
 
-        // Sort in memory: Default address first, then newest createdAt first
-        list.sort((a, b) {
-          if (a.isDefault != b.isDefault) {
-            return a.isDefault ? -1 : 1;
-          }
-          return b.createdAt.compareTo(a.createdAt);
-        });
+      final list = rows.map(_addressFromRow).whereType<DeliveryAddressEntity>().toList();
 
-        _localMemoryCache.clear();
-        _localMemoryCache.addAll(list);
-        return List<DeliveryAddressEntity>.unmodifiable(list);
-      }).handleError((error) {
-        debugPrint('[AddressRepository] streamAddresses error handled: $error');
-        return List<DeliveryAddressEntity>.unmodifiable(_localMemoryCache);
+      list.sort((a, b) {
+        if (a.isDefault != b.isDefault) {
+          return a.isDefault ? -1 : 1;
+        }
+        return b.createdAt.compareTo(a.createdAt);
       });
+
+      _localMemoryCache.clear();
+      _localMemoryCache.addAll(list);
+      _localStreamController.add(List<DeliveryAddressEntity>.unmodifiable(_localMemoryCache));
+      return List<DeliveryAddressEntity>.unmodifiable(list);
     } catch (e) {
-      debugPrint('[AddressRepository] streamAddresses query setup error: $e');
-      yield* _localStreamController.stream;
+      debugPrint('[AddressRepository] getAddresses error: $e');
+      return List<DeliveryAddressEntity>.unmodifiable(_localMemoryCache);
     }
   }
 
-  /// Save or update an address in Firestore with exact coordinates and words
+  /// Save or update an address in SQLite with exact coordinates and words
   Future<void> saveAddress(DeliveryAddressEntity address) async {
     final effectiveUserId = _resolveEffectiveUserId(address.userId);
 
@@ -92,7 +82,8 @@ class AddressRepository {
     );
 
     // If first address ever saved, make it default automatically
-    final makeDefault = address.isDefault || _localMemoryCache.isEmpty;
+    final existingList = await getAddresses(effectiveUserId);
+    final makeDefault = address.isDefault || existingList.isEmpty;
 
     final validatedAddress = address.copyWith(
       userId: effectiveUserId,
@@ -101,7 +92,47 @@ class AddressRepository {
       updatedAt: DateTime.now(),
     );
 
-    // 2. Update local memory cache and broadcast immediately
+    // 2. If this address is default, reset others in SQLite
+    if (makeDefault) {
+      await _database.update(
+        'addresses',
+        {'isDefault': 0},
+        where: 'userId = ?',
+        whereArgs: [effectiveUserId],
+      );
+    }
+
+    // 3. Persist to SQLite
+    final map = validatedAddress.toMap();
+    final row = <String, dynamic>{
+      'id': validatedAddress.id,
+      'userId': effectiveUserId,
+      'label': validatedAddress.label.name,
+      'recipientName': validatedAddress.recipientName,
+      'recipientPhone': validatedAddress.recipientPhone,
+      'provinceOrTerritory': validatedAddress.provinceOrTerritory,
+      'district': validatedAddress.district,
+      'city': validatedAddress.city,
+      'locality': validatedAddress.locality,
+      'societyOrScheme': validatedAddress.societyOrScheme,
+      'sectorOrBlock': validatedAddress.sectorOrBlock,
+      'street': validatedAddress.street,
+      'houseOrFlat': validatedAddress.houseOrFlat,
+      'landmark': validatedAddress.landmark,
+      'deliveryInstructions': validatedAddress.deliveryInstructions,
+      'formattedAddress': validatedAddress.formattedAddress,
+      'latitude': validatedAddress.latitude,
+      'longitude': validatedAddress.longitude,
+      'isDefault': makeDefault ? 1 : 0,
+      'serviceabilityStatus': validatedAddress.serviceabilityStatus.name,
+      'createdAt': validatedAddress.createdAt.toIso8601String(),
+      'updatedAt': DateTime.now().toIso8601String(),
+      'fullDataJson': jsonEncode(map),
+    };
+
+    await _database.insertOrReplace('addresses', row);
+
+    // Update in-memory list
     if (makeDefault) {
       for (int i = 0; i < _localMemoryCache.length; i++) {
         _localMemoryCache[i] = _localMemoryCache[i].copyWith(isDefault: false);
@@ -115,127 +146,92 @@ class AddressRepository {
     }
     _localStreamController.add(List<DeliveryAddressEntity>.unmodifiable(_localMemoryCache));
 
-    // 3. Persist to Firestore: subcollection first, then root user doc
-    if (_firestore != null && effectiveUserId.isNotEmpty && effectiveUserId != 'usr_guest') {
-      try {
-        final userDocRef = _firestore!.collection('users').doc(effectiveUserId);
-        final addressCol = userDocRef.collection('addresses');
-
-        // Write address to subcollection with full map including city and cityOrTown
-        await addressCol.doc(validatedAddress.id).set(
-          validatedAddress.toMap(),
-          SetOptions(merge: true),
-        );
-        debugPrint('[AddressRepository] Subcollection write OK: ${validatedAddress.id} -> ${validatedAddress.formattedAddress}');
-
-        // If this address is default, reset others in Firestore
-        if (makeDefault) {
-          final snap = await addressCol.where('isDefault', isEqualTo: true).get();
-          if (snap.docs.isNotEmpty) {
-            final batch = _firestore!.batch();
-            for (final doc in snap.docs) {
-              if (doc.id != validatedAddress.id) {
-                batch.update(doc.reference, {'isDefault': false});
-              }
-            }
-            await batch.commit();
-          }
-
-          // Sync full details, location coordinates & formatted address in words to user root doc
-          try {
-            await userDocRef.set(
-              {
-                'deliveryAddress': validatedAddress.formattedAddress,
-                'deliveryZone': validatedAddress.city,
-                'deliveryLocation': {
-                  'latitude': validatedAddress.latitude,
-                  'longitude': validatedAddress.longitude,
-                  'source': 'map',
-                  'formattedAddress': validatedAddress.formattedAddress,
-                },
-                'deliveryAddressDetails': validatedAddress.toMap(),
-                'updatedAt': FieldValue.serverTimestamp(),
-              },
-              SetOptions(merge: true),
-            );
-            debugPrint('[AddressRepository] User root doc synced with deliveryAddress');
-          } catch (userErr) {
-            debugPrint('[AddressRepository] Warning syncing user root doc: $userErr');
-          }
-        }
-      } catch (e) {
-        debugPrint('[AddressRepository] saveAddress Firestore write error: $e');
-        rethrow;
-      }
+    // Also sync to user root record in SQLite
+    if (makeDefault) {
+      await _database.update(
+        'users',
+        {
+          'deliveryAddress': validatedAddress.formattedAddress,
+          'deliveryZone': validatedAddress.city,
+          'updatedAt': DateTime.now().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [effectiveUserId],
+      );
+      _database.notifyTable('users');
     }
+
+    _database.notifyTable('addresses');
   }
 
-  /// Mark an address as default
+  /// Mark an address as default in SQLite
   Future<void> setDefaultAddress(String userId, String addressId) async {
     final effectiveUserId = _resolveEffectiveUserId(userId);
 
-    DeliveryAddressEntity? chosen;
-    for (int i = 0; i < _localMemoryCache.length; i++) {
-      if (_localMemoryCache[i].id == addressId) {
-        _localMemoryCache[i] = _localMemoryCache[i].copyWith(isDefault: true);
-        chosen = _localMemoryCache[i];
-      } else {
-        _localMemoryCache[i] = _localMemoryCache[i].copyWith(isDefault: false);
-      }
-    }
-    _localStreamController.add(List<DeliveryAddressEntity>.unmodifiable(_localMemoryCache));
+    await _database.update(
+      'addresses',
+      {'isDefault': 0},
+      where: 'userId = ?',
+      whereArgs: [effectiveUserId],
+    );
 
-    if (effectiveUserId.isNotEmpty && effectiveUserId != 'usr_guest' && chosen != null && _firestore != null) {
-      try {
-        final userDocRef = _firestore!.collection('users').doc(effectiveUserId);
-        final collection = userDocRef.collection('addresses');
-        final snap = await collection.get();
-        final batch = _firestore!.batch();
-        for (final doc in snap.docs) {
-          batch.update(doc.reference, {'isDefault': doc.id == addressId});
-        }
-        await batch.commit();
+    await _database.update(
+      'addresses',
+      {'isDefault': 1},
+      where: 'id = ? AND userId = ?',
+      whereArgs: [addressId, effectiveUserId],
+    );
 
-        try {
-          await userDocRef.set(
-            {
-              'deliveryAddress': chosen.formattedAddress,
-              'deliveryZone': chosen.city,
-              'deliveryLocation': {
-                'latitude': chosen.latitude,
-                'longitude': chosen.longitude,
-                'source': 'map',
-                'formattedAddress': chosen.formattedAddress,
-              },
-              'deliveryAddressDetails': chosen.toMap(),
-              'updatedAt': FieldValue.serverTimestamp(),
-            },
-            SetOptions(merge: true),
-          );
-        } catch (_) {}
-      } catch (e) {
-        debugPrint('[AddressRepository] setDefaultAddress error: $e');
-      }
+    final addresses = await getAddresses(effectiveUserId);
+    final chosen = addresses.where((a) => a.id == addressId).firstOrNull;
+    if (chosen != null) {
+      await _database.update(
+        'users',
+        {
+          'deliveryAddress': chosen.formattedAddress,
+          'deliveryZone': chosen.city,
+          'updatedAt': DateTime.now().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [effectiveUserId],
+      );
+      _database.notifyTable('users');
     }
+
+    _database.notifyTable('addresses');
   }
 
-  /// Delete an address
+  /// Delete an address from SQLite
   Future<void> deleteAddress(String userId, String addressId) async {
     final effectiveUserId = _resolveEffectiveUserId(userId);
     _localMemoryCache.removeWhere((a) => a.id == addressId);
     _localStreamController.add(List<DeliveryAddressEntity>.unmodifiable(_localMemoryCache));
 
-    if (effectiveUserId.isNotEmpty && effectiveUserId != 'usr_guest' && _firestore != null) {
-      try {
-        await _firestore!
-            .collection('users')
-            .doc(effectiveUserId)
-            .collection('addresses')
-            .doc(addressId)
-            .delete();
-      } catch (e) {
-        debugPrint('[AddressRepository] deleteAddress error: $e');
+    await _database.delete(
+      'addresses',
+      where: 'id = ? AND userId = ?',
+      whereArgs: [addressId, effectiveUserId],
+    );
+
+    _database.notifyTable('addresses');
+  }
+
+  DeliveryAddressEntity? _addressFromRow(Map<String, dynamic> row) {
+    try {
+      final isDefaultCol = (row['isDefault'] is int
+          ? (row['isDefault'] as int) == 1
+          : (row['isDefault'] as bool? ?? false));
+      final fullJson = row['fullDataJson'] as String?;
+      if (fullJson != null && fullJson.isNotEmpty) {
+        final map = jsonDecode(fullJson) as Map<String, dynamic>;
+        final entity = DeliveryAddressEntity.fromMap(map, row['id'] as String);
+        return entity.copyWith(isDefault: isDefaultCol);
       }
+      final entity = DeliveryAddressEntity.fromMap(row, row['id'] as String);
+      return entity.copyWith(isDefault: isDefaultCol);
+    } catch (e) {
+      debugPrint('_addressFromRow parse error: $e');
+      return null;
     }
   }
 }

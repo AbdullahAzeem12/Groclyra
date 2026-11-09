@@ -1,126 +1,130 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:groclyra/core/database/app_database.dart';
 import 'package:groclyra/features/customer/cart/domain/entities/cart_item_entity.dart';
 import 'package:groclyra/features/customer/orders/domain/entities/order_entity.dart';
 import 'package:groclyra/features/notifications/data/notifications_repository.dart';
 import 'package:groclyra/core/services/rate_limit_service.dart';
 
-/// Fully Firestore-backed OrderRepository.
+/// Fully SQL-backed OrderRepository (SQLite).
 ///
-/// Orders are written and read exclusively from the `orders` Firestore
-/// collection. Real-time streams keep all portals (customer, seller, rider,
-/// admin) in sync without manual refreshes.
+/// Orders and delivery tasks are written and read exclusively from SQLite tables.
+/// Real-time streams powered by AppDatabase table change notifications keep all portals
+/// (customer, seller, rider, admin) in sync instantly.
 class OrderRepository {
-  final FirebaseFirestore _firestore;
+  final AppDatabase _database;
   final RateLimitService _rateLimitService;
-  // Phase 1B: best-effort notification dispatcher (never blocks order flow).
-  final NotificationDispatcher _notifier =
-      NotificationDispatcher(FirebaseFirestore.instance);
+  final NotificationDispatcher _notifier;
 
   OrderRepository({
-    FirebaseFirestore? firestore,
+    dynamic firestore, // Kept dynamic for legacy test compatibility
     RateLimitService? rateLimitService,
-  })  : _firestore = firestore ?? FirebaseFirestore.instance,
-        _rateLimitService = rateLimitService ?? RateLimitService.instance;
+    AppDatabase? database,
+  })  : _database = database ?? AppDatabase.instance,
+        _rateLimitService = rateLimitService ?? RateLimitService.instance,
+        _notifier = NotificationDispatcher(database ?? AppDatabase.instance);
 
   // ──────────────────────────────────────────────────────────────
   // STREAMS
   // ──────────────────────────────────────────────────────────────
 
-  /// Real-time stream of all orders for a specific customer.
-  Stream<List<OrderEntity>> streamOrdersForCustomer(String customerId) {
-    return _firestore
-        .collection('orders')
-        .where('customerId', isEqualTo: customerId)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snap) => snap.docs
-            .map((doc) => _orderFromDoc(doc))
-            .whereType<OrderEntity>()
-            .toList())
-        .handleError((e) {
-      debugPrint('OrderRepository.streamOrdersForCustomer error: $e');
-      return <OrderEntity>[];
+  /// Real-time stream of all orders for a specific customer from SQLite.
+  Stream<List<OrderEntity>> streamOrdersForCustomer(String customerId) async* {
+    yield await getOrders(customerId: customerId);
+
+    yield* _database.watchTable('orders').asyncMap((_) async {
+      return await getOrders(customerId: customerId);
     });
   }
 
-  /// Real-time stream of orders assigned to a specific seller (via subOrders).
-  Stream<List<OrderEntity>> streamOrdersForSeller(String sellerId) {
-    return _firestore
-        .collection('orders')
-        .where('sellerIds', arrayContains: sellerId)
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snap) => snap.docs
-            .map((doc) => _orderFromDoc(doc))
-            .whereType<OrderEntity>()
-            .toList())
-        .handleError((e) {
-      debugPrint('OrderRepository.streamOrdersForSeller error: $e');
-      return <OrderEntity>[];
+  /// Real-time stream of orders assigned to a specific seller from SQLite.
+  Stream<List<OrderEntity>> streamOrdersForSeller(String sellerId) async* {
+    yield await _getOrdersForSeller(sellerId);
+
+    yield* _database.watchTable('orders').asyncMap((_) async {
+      return await _getOrdersForSeller(sellerId);
     });
   }
 
-  /// Real-time stream of a single order by ID.
-  Stream<OrderEntity?> streamOrderById(String orderId) {
-    return _firestore
-        .collection('orders')
-        .doc(orderId)
-        .snapshots()
-        .map((doc) => doc.exists ? _orderFromDoc(doc) : null)
-        .handleError((e) {
-      debugPrint('OrderRepository.streamOrderById error: $e');
-      return null;
+  /// Real-time stream of a single order by ID from SQLite.
+  Stream<OrderEntity?> streamOrderById(String orderId) async* {
+    yield await getOrderById(orderId);
+
+    yield* _database.watchTable('orders').asyncMap((_) async {
+      return await getOrderById(orderId);
     });
   }
 
-  /// Real-time stream of all orders (for admin dashboard).
-  Stream<List<OrderEntity>> streamAllOrders() {
-    return _firestore
-        .collection('orders')
-        .orderBy('createdAt', descending: true)
-        .limit(100)
-        .snapshots()
-        .map((snap) => snap.docs
-            .map((doc) => _orderFromDoc(doc))
-            .whereType<OrderEntity>()
-            .toList())
-        .handleError((e) {
-      debugPrint('OrderRepository.streamAllOrders error: $e');
-      return <OrderEntity>[];
+  /// Real-time stream of all orders (for admin dashboard) from SQLite.
+  Stream<List<OrderEntity>> streamAllOrders() async* {
+    yield await _getAllOrders();
+
+    yield* _database.watchTable('orders').asyncMap((_) async {
+      return await _getAllOrders();
     });
   }
 
   // ──────────────────────────────────────────────────────────────
-  // ONE-SHOT READS (kept for backward compatibility)
+  // ONE-SHOT READS
   // ──────────────────────────────────────────────────────────────
 
   Future<List<OrderEntity>> getOrders({String? customerId}) async {
     try {
-      Query<Map<String, dynamic>> query = _firestore
-          .collection('orders')
-          .orderBy('createdAt', descending: true);
-      if (customerId != null) {
-        query = query.where('customerId', isEqualTo: customerId);
-      }
-      final snap = await query.get();
-      return snap.docs
-          .map((doc) => _orderFromDoc(doc))
-          .whereType<OrderEntity>()
-          .toList();
+      final rows = await _database.query(
+        'orders',
+        where: customerId != null && customerId.isNotEmpty ? 'customerId = ?' : null,
+        whereArgs: customerId != null && customerId.isNotEmpty ? [customerId] : null,
+        orderBy: 'createdAt DESC',
+      );
+      return rows.map(_orderFromRow).whereType<OrderEntity>().toList();
     } catch (e) {
       debugPrint('OrderRepository.getOrders error: $e');
       return [];
     }
   }
 
+  Future<List<OrderEntity>> _getOrdersForSeller(String sellerId) async {
+    try {
+      final rows = await _database.query(
+        'orders',
+        where: 'sellerIds LIKE ?',
+        whereArgs: ['%$sellerId%'],
+        orderBy: 'createdAt DESC',
+      );
+      return rows.map(_orderFromRow).whereType<OrderEntity>().toList();
+    } catch (e) {
+      debugPrint('OrderRepository._getOrdersForSeller error: $e');
+      return [];
+    }
+  }
+
+  Future<List<OrderEntity>> _getAllOrders() async {
+    try {
+      final rows = await _database.query(
+        'orders',
+        orderBy: 'createdAt DESC',
+        limit: 100,
+      );
+      return rows.map(_orderFromRow).whereType<OrderEntity>().toList();
+    } catch (e) {
+      debugPrint('OrderRepository._getAllOrders error: $e');
+      return [];
+    }
+  }
+
   Future<OrderEntity?> getOrderById(String orderId) async {
     try {
-      final doc = await _firestore.collection('orders').doc(orderId).get();
-      if (!doc.exists) return null;
-      return _orderFromDoc(doc);
+      final rows = await _database.query(
+        'orders',
+        where: 'id = ?',
+        whereArgs: [orderId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return null;
+      return _orderFromRow(rows.first);
     } catch (e) {
       debugPrint('OrderRepository.getOrderById error: $e');
       return null;
@@ -128,7 +132,7 @@ class OrderRepository {
   }
 
   // ──────────────────────────────────────────────────────────────
-  // CREATE ORDER
+  // CREATE ORDER (SQLite)
   // ──────────────────────────────────────────────────────────────
 
   Future<OrderEntity> createOrder({
@@ -139,16 +143,12 @@ class OrderRepository {
     required List<CartItemEntity> items,
     required double discountAmount,
     required PaymentMethod paymentMethod,
-    // New optional parameters: exact delivery coordinates captured at
-    // checkout (map picker). Previously the rider navigation screen silently
-    // fell back to the hard-coded Karachi centre when these were missing.
     double? customerLat,
     double? customerLng,
   }) async {
-    // Rate limit check: Prevent customer order flooding / rapid duplicate submissions
+    // Rate limit check: Prevent customer order flooding
     if (!_rateLimitService.canPlaceOrder(customerId)) {
-      final rem =
-          _rateLimitService.getRemainingOrderCooldownSeconds(customerId);
+      final rem = _rateLimitService.getRemainingOrderCooldownSeconds(customerId);
       throw Exception(
         'An order was recently submitted. Please wait $rem seconds before placing another order.',
       );
@@ -170,8 +170,7 @@ class OrderRepository {
       final sId = entry.key;
       final sItems = entry.value;
       final sName = sItems.first.sellerName;
-      final sSubtotal =
-          sItems.fold(0.0, (acc, it) => acc + it.totalPrice);
+      final sSubtotal = sItems.fold(0.0, (acc, it) => acc + it.totalPrice);
       const sShipping = 150.0;
 
       totalSubtotal += sSubtotal;
@@ -194,7 +193,7 @@ class OrderRepository {
       );
     }
 
-    // 2. Generate order document with cryptographically collision-safe ID
+    // 2. Generate order document
     final otp = '${secureRandom.nextInt(9000) + 1000}';
     final entropy = secureRandom.nextInt(900000) + 100000;
     final orderId = 'ord_${DateTime.now().microsecondsSinceEpoch}_$entropy';
@@ -209,8 +208,7 @@ class OrderRepository {
       customerPhone: customerPhone,
       deliveryAddress: deliveryAddress,
       subOrders: subOrders,
-      totalAmount: (totalSubtotal + totalShipping - discountAmount)
-          .clamp(0.0, double.infinity),
+      totalAmount: (totalSubtotal + totalShipping - discountAmount).clamp(0.0, double.infinity),
       discountAmount: discountAmount,
       totalShippingFee: totalShipping,
       status: OrderStatus.paid,
@@ -220,78 +218,103 @@ class OrderRepository {
       customerOtp: otp,
     );
 
-    // 3. Write to Firestore — include sellerIds array for seller-side queries
-    final data = order.toJson();
-    data['createdAt'] = FieldValue.serverTimestamp();
-    data['updatedAt'] = FieldValue.serverTimestamp();
-    data['sellerIds'] = sellerGroup.keys.toList(); // enables arrayContains filter
+    // 3. Write order to SQLite
+    final orderData = order.toJson();
+    final sellerIdsList = sellerGroup.keys.toList();
+    orderData['sellerIds'] = sellerIdsList;
 
-    await _firestore.collection('orders').doc(orderId).set(data);
+    final orderRow = <String, dynamic>{
+      'id': orderId,
+      'orderNumber': orderNumber,
+      'customerId': customerId,
+      'customerName': customerName,
+      'customerPhone': customerPhone,
+      'deliveryAddress': deliveryAddress,
+      'customerLat': customerLat,
+      'customerLng': customerLng,
+      'totalAmount': order.totalAmount,
+      'discountAmount': discountAmount,
+      'totalShippingFee': totalShipping,
+      'status': order.status.name,
+      'paymentMethod': paymentMethod.name,
+      'customerOtp': otp,
+      'sellerIds': jsonEncode(sellerIdsList),
+      'subOrdersJson': jsonEncode(subOrders.map((s) => s.toJson()).toList()),
+      'fullDataJson': jsonEncode(orderData),
+      'createdAt': now.toIso8601String(),
+      'estimatedDelivery': order.estimatedDelivery.toIso8601String(),
+      'updatedAt': now.toIso8601String(),
+    };
+
+    await _database.insertOrReplace('orders', orderRow);
     await _rateLimitService.recordOrderPlaced(customerId);
 
-    // 4. Create real-time delivery task for riders in the deliveryTasks collection
+    // 4. Insert order items into SQLite
+    for (final item in items) {
+      await _database.insertOrReplace('order_items', {
+        'id': 'item_${item.id}_$orderId',
+        'orderId': orderId,
+        'productId': item.product.id,
+        'title': item.product.title,
+        'quantity': item.quantity,
+        'unitPrice': item.unitPrice,
+        'totalPrice': item.totalPrice,
+        'variantName': item.selectedVariant?.name,
+        'imageUrl': item.product.images.isNotEmpty ? item.product.images.first : '',
+        'sellerId': item.sellerId,
+        'createdAt': now.toIso8601String(),
+      });
+    }
+
+    // 5. Create real-time delivery tasks in SQLite delivery_tasks table
     for (final sub in subOrders) {
       final taskId = 'task_${sub.id}';
 
-      // Upgraded: read the seller's real store profile so delivery tasks carry
-      // actual pickup details instead of the previous hardcoded placeholders.
-      // The old hardcoded strings are kept as final fallbacks so task creation
-      // can never fail, even when the seller profile is missing.
       String sellerAddress = 'Marketplace Partner Outlet';
       String sellerPhone = '+92-300-1234567';
       double? sellerLat;
       double? sellerLng;
+
       try {
-        final sellerDoc = await _firestore
-            .collection('sellerProfiles')
-            .doc(sub.sellerId)
-            .get();
-        final sData = sellerDoc.data() ?? const {};
-        final sAddr = (sData['storeAddress'] ?? sData['address']) as String?;
-        if (sAddr != null && sAddr.trim().isNotEmpty) {
-          sellerAddress = sAddr.trim();
-        }
-        final sPhone = (sData['phone'] ?? sData['contactPhone']) as String?;
-        if (sPhone != null && sPhone.trim().isNotEmpty) {
-          sellerPhone = sPhone.trim();
-        }
-        final lat = (sData['storeLat'] ?? sData['latitude']) as num?;
-        final lng = (sData['storeLng'] ?? sData['longitude']) as num?;
-        if (lat != null && lng != null) {
-          sellerLat = lat.toDouble();
-          sellerLng = lng.toDouble();
+        final sellerRows = await _database.query(
+          'seller_profiles',
+          where: 'sellerId = ?',
+          whereArgs: [sub.sellerId],
+          limit: 1,
+        );
+        if (sellerRows.isNotEmpty) {
+          final sData = sellerRows.first;
+          final sAddr = sData['address']?.toString();
+          if (sAddr != null && sAddr.trim().isNotEmpty) {
+            sellerAddress = sAddr.trim();
+          }
+          final sPhone = sData['phone']?.toString();
+          if (sPhone != null && sPhone.trim().isNotEmpty) {
+            sellerPhone = sPhone.trim();
+          }
+          final lat = (sData['latitude'] as num?)?.toDouble();
+          final lng = (sData['longitude'] as num?)?.toDouble();
+          if (lat != null && lng != null) {
+            sellerLat = lat;
+            sellerLng = lng;
+          }
         }
       } catch (e) {
-        debugPrint(
-            'OrderRepository: seller profile read notice for ${sub.sellerId}: $e');
+        debugPrint('OrderRepository: seller profile read notice: $e');
       }
 
-      // Upgraded: compute distance & payout from real coordinates when both
-      // the seller store and customer have lat/lng; otherwise the existing
-      // default estimate is preserved so routes never break.
       double distanceKm = 3.5;
       double estimatedEarnings = 220.0;
-      if (sellerLat != null &&
-          sellerLng != null &&
-          customerLat != null &&
-          customerLng != null) {
-        final km = _haversineKm(
-          sellerLat,
-          sellerLng,
-          customerLat,
-          customerLng,
-        );
+      if (sellerLat != null && sellerLng != null && customerLat != null && customerLng != null) {
+        final km = _haversineKm(sellerLat, sellerLng, customerLat, customerLng);
         if (km > 0.05) {
           distanceKm = double.parse(km.toStringAsFixed(2));
-          // Payout model: base fee + per-km rate (kept in sync with the
-          // estimated earnings previously shown to riders).
-          estimatedEarnings =
-              double.parse((80 + distanceKm * 35).toStringAsFixed(2));
+          estimatedEarnings = double.parse((80 + distanceKm * 35).toStringAsFixed(2));
         }
       }
 
       try {
-        await _firestore.collection('deliveryTasks').doc(taskId).set({
+        await _database.insertOrReplace('delivery_tasks', {
           'id': taskId,
           'orderId': orderId,
           'subOrderId': sub.id,
@@ -299,34 +322,36 @@ class OrderRepository {
           'sellerStoreName': sub.sellerName,
           'sellerAddress': sellerAddress,
           'sellerPhone': sellerPhone,
+          'pickupLat': sellerLat ?? 31.5204,
+          'pickupLng': sellerLng ?? 74.3587,
           'customerName': customerName,
           'customerAddress': deliveryAddress,
           'customerPhone': customerPhone,
+          'dropLat': customerLat ?? 31.5204,
+          'dropLng': customerLng ?? 74.3587,
+          'riderLat': sellerLat ?? 31.5204,
+          'riderLng': sellerLng ?? 74.3587,
           'distanceKm': distanceKm,
           'codAmount': paymentMethod == PaymentMethod.cashOnDelivery
               ? (sub.subtotal + sub.shippingFee)
               : 0.0,
           'estimatedEarnings': estimatedEarnings,
-          // New fields: exact destination coordinates for rider navigation.
-          // Null-safe: only written when the caller supplies them, otherwise
-          // the navigation screen keeps its existing behavior.
-          if (customerLat != null) 'customerLat': customerLat,
-          if (customerLng != null) 'customerLng': customerLng,
-          if (sellerLat != null) 'sellerLat': sellerLat,
-          if (sellerLng != null) 'sellerLng': sellerLng,
           'status': 'available',
           'customerOtp': otp,
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-          'assignedAt': FieldValue.serverTimestamp(),
+          'createdAt': now.toIso8601String(),
+          'updatedAt': now.toIso8601String(),
+          'assignedAt': now.toIso8601String(),
         });
       } catch (e) {
         debugPrint('OrderRepository: delivery task creation notice: $e');
       }
     }
 
-    // ── Notifications (Phase 1B) ─────────────────────────────────────────
-    // Best-effort, after every primary write has succeeded.
+    _database.notifyTable('orders');
+    _database.notifyTable('order_items');
+    _database.notifyTable('delivery_tasks');
+
+    // 6. Notifications
     for (final entry in sellerGroup.entries) {
       await _notifier.toUser(
         recipientId: entry.key,
@@ -346,14 +371,13 @@ class OrderRepository {
     return order;
   }
 
-  /// Great-circle distance in kilometres between two lat/lng points.
   static double _haversineKm(
     double lat1,
     double lng1,
     double lat2,
     double lng2,
   ) {
-    const r = 6372.8; // Earth radius in km
+    const r = 6372.8;
     final dLat = _deg2rad(lat2 - lat1);
     final dLng = _deg2rad(lng2 - lng1);
     final a = 0.5 -
@@ -367,19 +391,34 @@ class OrderRepository {
   static double _deg2rad(double deg) => deg * (math.pi / 180);
 
   // ──────────────────────────────────────────────────────────────
-  // STATUS UPDATES
+  // STATUS UPDATES (SQLite)
   // ──────────────────────────────────────────────────────────────
 
-  /// Updates the top-level order status.
-  Future<void> updateOrderStatus(
-      String orderId, OrderStatus newStatus) async {
-    await _firestore.collection('orders').doc(orderId).update({
-      'status': newStatus.name,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+  /// Updates top-level order status in SQLite.
+  Future<void> updateOrderStatus(String orderId, OrderStatus newStatus) async {
+    try {
+      final rows = await _database.query('orders', where: 'id = ?', whereArgs: [orderId], limit: 1);
+      if (rows.isNotEmpty) {
+        final existing = Map<String, dynamic>.from(rows.first);
+        existing['status'] = newStatus.name;
+        existing['updatedAt'] = DateTime.now().toIso8601String();
+
+        if (existing['fullDataJson'] != null) {
+          final full = jsonDecode(existing['fullDataJson'] as String) as Map<String, dynamic>;
+          full['status'] = newStatus.name;
+          full['updatedAt'] = existing['updatedAt'];
+          existing['fullDataJson'] = jsonEncode(full);
+        }
+
+        await _database.update('orders', existing, where: 'id = ?', whereArgs: [orderId]);
+        _database.notifyTable('orders');
+      }
+    } catch (e) {
+      debugPrint('OrderRepository.updateOrderStatus error: $e');
+    }
   }
 
-  /// Updates the status of a specific sub-order (seller / rider view).
+  /// Updates status of a specific sub-order in SQLite.
   Future<void> updateSubOrderStatus({
     required String orderId,
     required String subOrderId,
@@ -388,18 +427,22 @@ class OrderRepository {
     String? riderName,
     String? riderPhone,
   }) async {
-    final docRef = _firestore.collection('orders').doc(orderId);
-    String? customerId;
-    await _firestore.runTransaction((txn) async {
-      final snap = await txn.get(docRef);
-      if (!snap.exists) return;
-      final data = snap.data()!;
-      customerId = data['customerId'] as String?;
-      final subOrders = List<Map<String, dynamic>>.from(
-        (data['subOrders'] as List<dynamic>? ?? []).map(
-            (s) => Map<String, dynamic>.from(s as Map)),
+    try {
+      final rows = await _database.query('orders', where: 'id = ?', whereArgs: [orderId], limit: 1);
+      if (rows.isEmpty) return;
+
+      final existing = Map<String, dynamic>.from(rows.first);
+      final customerId = existing['customerId']?.toString();
+
+      final fullData = existing['fullDataJson'] != null
+          ? jsonDecode(existing['fullDataJson'] as String) as Map<String, dynamic>
+          : <String, dynamic>{};
+
+      final subOrdersList = List<Map<String, dynamic>>.from(
+        (fullData['subOrders'] as List? ?? []).map((s) => Map<String, dynamic>.from(s as Map)),
       );
-      for (final sub in subOrders) {
+
+      for (final sub in subOrdersList) {
         if (sub['id'] == subOrderId) {
           sub['status'] = newStatus.name;
           if (riderId != null) sub['riderId'] = riderId;
@@ -409,11 +452,8 @@ class OrderRepository {
         }
       }
 
-      // Derive overall order status from sub-orders
-      final allDelivered =
-          subOrders.every((s) => s['status'] == OrderStatus.delivered.name);
-      final anyFailed =
-          subOrders.any((s) => s['status'] == OrderStatus.cancelled.name);
+      final allDelivered = subOrdersList.every((s) => s['status'] == OrderStatus.delivered.name);
+      final anyFailed = subOrdersList.any((s) => s['status'] == OrderStatus.cancelled.name);
 
       final overallStatus = allDelivered
           ? OrderStatus.delivered.name
@@ -421,67 +461,93 @@ class OrderRepository {
               ? OrderStatus.cancelled.name
               : newStatus.name;
 
-      // Denormalised rider list (security rules key off this field so no
-      // array scanning is possible in rules). Additive: previous subOrders
-      // shape is untouched.
-      final riderIds = (data['riderIds'] as List?)?.cast<String>() ?? const [];
-      if (riderId != null && !riderIds.contains(riderId)) {
-        riderIds.add(riderId);
+      final now = DateTime.now().toIso8601String();
+      fullData['subOrders'] = subOrdersList;
+      fullData['status'] = overallStatus;
+      fullData['updatedAt'] = now;
+
+      existing['status'] = overallStatus;
+      existing['subOrdersJson'] = jsonEncode(subOrdersList);
+      existing['fullDataJson'] = jsonEncode(fullData);
+      existing['updatedAt'] = now;
+
+      await _database.update('orders', existing, where: 'id = ?', whereArgs: [orderId]);
+      _database.notifyTable('orders');
+
+      // Keep delivery_tasks table in lockstep with order updates
+      try {
+        final taskStatus = switch (newStatus) {
+          OrderStatus.delivered => 'delivered',
+          OrderStatus.inTransit || OrderStatus.outForDelivery => 'inTransit',
+          OrderStatus.riderAssigned => 'accepted',
+          OrderStatus.cancelled || OrderStatus.cancelledBySeller => 'failed',
+          _ => 'available',
+        };
+        final taskUpdate = <String, dynamic>{
+          'status': taskStatus,
+          'updatedAt': now,
+        };
+        if (riderId != null) taskUpdate['riderId'] = riderId;
+        if (newStatus == OrderStatus.delivered) taskUpdate['completedAt'] = now;
+
+        await _database.update(
+          'delivery_tasks',
+          taskUpdate,
+          where: 'orderId = ? AND subOrderId = ?',
+          whereArgs: [orderId, subOrderId],
+        );
+        _database.notifyTable('delivery_tasks');
+      } catch (err) {
+        debugPrint('Sync delivery_tasks from updateSubOrderStatus: $err');
       }
 
-      txn.update(docRef, {
-        'subOrders': subOrders,
-        'status': overallStatus,
-        if (riderId != null) 'riderIds': riderIds,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    });
-
-    // ── Notifications (Phase 1B) — customer-facing status updates ────────
-    final rid = customerId;
-    if (rid != null && rid.isNotEmpty) {
-      switch (newStatus) {
-        case OrderStatus.delivered:
-          await _notifier.toUser(
-            recipientId: rid,
-            kind: 'delivery',
-            title: '✅ Order delivered',
-            body: 'Your order #$orderId has been delivered. Rate your experience in Order History!',
-            data: {'orderId': orderId, 'status': 'delivered'},
-          );
-          break;
-        case OrderStatus.riderAssigned:
-          await _notifier.toUser(
-            recipientId: rid,
-            kind: 'delivery',
-            title: '🛵 Rider assigned',
-            body: 'A rider has been assigned to order #$orderId and will pick it up shortly.',
-            data: {'orderId': orderId, 'status': 'riderAssigned'},
-          );
-          break;
-        case OrderStatus.inTransit:
-        case OrderStatus.outForDelivery:
-          await _notifier.toUser(
-            recipientId: rid,
-            kind: 'delivery',
-            title: '📦 Order on the way',
-            body: 'Order #$orderId is out for delivery. Get the OTP ready!',
-            data: {'orderId': orderId, 'status': newStatus.name},
-          );
-          break;
-        case OrderStatus.cancelled:
-        case OrderStatus.cancelledBySeller:
-          await _notifier.toUser(
-            recipientId: rid,
-            kind: 'delivery',
-            title: '⚠️ Order cancelled',
-            body: 'Order #$orderId was cancelled. Any paid amount will be refunded.',
-            data: {'orderId': orderId, 'status': 'cancelled'},
-          );
-          break;
-        default:
-          break;
+      // Customer notifications
+      if (customerId != null && customerId.isNotEmpty) {
+        switch (newStatus) {
+          case OrderStatus.delivered:
+            await _notifier.toUser(
+              recipientId: customerId,
+              kind: 'delivery',
+              title: '✅ Order delivered',
+              body: 'Your order #$orderId has been delivered. Rate your experience in Order History!',
+              data: {'orderId': orderId, 'status': 'delivered'},
+            );
+            break;
+          case OrderStatus.riderAssigned:
+            await _notifier.toUser(
+              recipientId: customerId,
+              kind: 'delivery',
+              title: '🛵 Rider assigned',
+              body: 'A rider has been assigned to order #$orderId and will pick it up shortly.',
+              data: {'orderId': orderId, 'status': 'riderAssigned'},
+            );
+            break;
+          case OrderStatus.inTransit:
+          case OrderStatus.outForDelivery:
+            await _notifier.toUser(
+              recipientId: customerId,
+              kind: 'delivery',
+              title: '📦 Order on the way',
+              body: 'Order #$orderId is out for delivery. Get the OTP ready!',
+              data: {'orderId': orderId, 'status': newStatus.name},
+            );
+            break;
+          case OrderStatus.cancelled:
+          case OrderStatus.cancelledBySeller:
+            await _notifier.toUser(
+              recipientId: customerId,
+              kind: 'delivery',
+              title: '⚠️ Order cancelled',
+              body: 'Order #$orderId was cancelled. Any paid amount will be refunded.',
+              data: {'orderId': orderId, 'status': 'cancelled'},
+            );
+            break;
+          default:
+            break;
+        }
       }
+    } catch (e) {
+      debugPrint('OrderRepository.updateSubOrderStatus error: $e');
     }
   }
 
@@ -507,28 +573,17 @@ class OrderRepository {
   // PARSING HELPERS
   // ──────────────────────────────────────────────────────────────
 
-  OrderEntity? _orderFromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  OrderEntity? _orderFromRow(Map<String, dynamic> row) {
     try {
-      final data = doc.data()!;
-      data['id'] = doc.id;
-
-      // Convert Firestore Timestamp → ISO string for fromJson
-      final createdAt = data['createdAt'];
-      if (createdAt is Timestamp) {
-        data['createdAt'] = createdAt.toDate().toIso8601String();
+      final fullJson = row['fullDataJson'] as String?;
+      if (fullJson != null && fullJson.isNotEmpty) {
+        final data = jsonDecode(fullJson) as Map<String, dynamic>;
+        data['id'] = row['id'];
+        return OrderEntity.fromJson(data);
       }
-      final updatedAt = data['updatedAt'];
-      if (updatedAt is Timestamp) {
-        data['updatedAt'] = updatedAt.toDate().toIso8601String();
-      }
-      final estimated = data['estimatedDelivery'];
-      if (estimated is Timestamp) {
-        data['estimatedDelivery'] = estimated.toDate().toIso8601String();
-      }
-
-      return OrderEntity.fromJson(data);
+      return OrderEntity.fromJson(Map<String, dynamic>.from(row));
     } catch (e) {
-      debugPrint('OrderRepository._orderFromDoc error for ${doc.id}: $e');
+      debugPrint('OrderRepository._orderFromRow parse error: $e');
       return null;
     }
   }

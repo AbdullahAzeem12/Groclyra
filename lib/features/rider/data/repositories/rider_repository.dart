@@ -1,89 +1,86 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:groclyra/core/database/app_database.dart';
 import '../../domain/entities/delivery_task_entity.dart';
 
-/// Firestore-backed RiderRepository.
-///
-/// Delivery tasks are derived from the `orders` collection — specifically
-/// the `subOrders` embedded array — and also from a dedicated `deliveryTasks`
-/// collection that is written when a rider is assigned to a sub-order.
+/// SQL-backed RiderRepository (SQLite).
 class RiderRepository {
-  final FirebaseFirestore _firestore;
+  final AppDatabase _database;
 
-  RiderRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+  RiderRepository({
+    dynamic firestore, // Kept dynamic for legacy test compatibility
+    AppDatabase? database,
+  }) : _database = database ?? AppDatabase.instance;
 
   // ──────────────────────────────────────────────────────────────
   // STREAMS
   // ──────────────────────────────────────────────────────────────
 
-  /// Real-time stream of delivery tasks assigned to this rider.
-  Stream<List<DeliveryTaskEntity>> streamTasksForRider(String riderId) {
-    return _firestore
-        .collection('deliveryTasks')
-        .where('riderId', isEqualTo: riderId)
-        .orderBy('assignedAt', descending: true)
-        .snapshots()
-        .map((snap) => snap.docs
-            .map((doc) => _taskFromDoc(doc))
-            .whereType<DeliveryTaskEntity>()
-            .toList())
-        .handleError((e) {
-      debugPrint('RiderRepository.streamTasksForRider error: $e');
-      return <DeliveryTaskEntity>[];
+  /// Real-time stream of delivery tasks assigned to this rider from SQLite.
+  Stream<List<DeliveryTaskEntity>> streamTasksForRider(String riderId) async* {
+    yield await getDeliveryTasks(riderId: riderId);
+
+    yield* _database.watchTable('delivery_tasks').asyncMap((_) async {
+      return await getDeliveryTasks(riderId: riderId);
     });
   }
 
-  /// Real-time stream of available (unassigned) delivery tasks.
-  Stream<List<DeliveryTaskEntity>> streamAvailableTasks() {
-    return _firestore
-        .collection('deliveryTasks')
-        .where('status', isEqualTo: DeliveryTaskStatus.available.name)
-        .orderBy('assignedAt', descending: true)
-        .snapshots()
-        .map((snap) => snap.docs
-            .map((doc) => _taskFromDoc(doc))
-            .whereType<DeliveryTaskEntity>()
-            .toList())
-        .handleError((e) {
-      debugPrint('RiderRepository.streamAvailableTasks error: $e');
-      return <DeliveryTaskEntity>[];
+  /// Real-time stream of available (unassigned) delivery tasks from SQLite.
+  Stream<List<DeliveryTaskEntity>> streamAvailableTasks() async* {
+    yield await _getAvailableTasks();
+
+    yield* _database.watchTable('delivery_tasks').asyncMap((_) async {
+      return await _getAvailableTasks();
     });
+  }
+
+  Future<List<DeliveryTaskEntity>> _getAvailableTasks() async {
+    try {
+      final rows = await _database.query(
+        'delivery_tasks',
+        where: 'status = ?',
+        whereArgs: [DeliveryTaskStatus.available.name],
+        orderBy: 'assignedAt DESC',
+      );
+      return rows.map(_taskFromRow).whereType<DeliveryTaskEntity>().toList();
+    } catch (e) {
+      debugPrint('RiderRepository._getAvailableTasks error: $e');
+      return <DeliveryTaskEntity>[];
+    }
   }
 
   /// Combined stream: tasks assigned to this rider + all available tasks.
-  Stream<List<DeliveryTaskEntity>> streamRiderDashboard(String riderId) {
-    // Merge assigned and available tasks into one list
-    return _firestore
-        .collection('deliveryTasks')
-        .where('status', whereIn: [
-          DeliveryTaskStatus.available.name,
-          DeliveryTaskStatus.accepted.name,
-          DeliveryTaskStatus.pickedUp.name,
-          DeliveryTaskStatus.inTransit.name,
-        ])
-        .orderBy('assignedAt', descending: false)
-        .snapshots()
-        .map((snap) {
-          final all = snap.docs
-              .map((doc) => _taskFromDoc(doc))
-              .whereType<DeliveryTaskEntity>()
-              .toList();
-          // Put this rider's accepted tasks first, then available ones
-          all.sort((a, b) {
-            final aIsRider = a.status != DeliveryTaskStatus.available;
-            final bIsRider = b.status != DeliveryTaskStatus.available;
-            if (aIsRider && !bIsRider) return -1;
-            if (!aIsRider && bIsRider) return 1;
-            return b.assignedAt.compareTo(a.assignedAt);
-          });
-          return all;
-        })
-        .handleError((e) {
-          debugPrint('RiderRepository.streamRiderDashboard error: $e');
-          return <DeliveryTaskEntity>[];
-        });
+  Stream<List<DeliveryTaskEntity>> streamRiderDashboard(String riderId) async* {
+    yield await _getRiderDashboardTasks(riderId);
+
+    yield* _database.watchTable('delivery_tasks').asyncMap((_) async {
+      return await _getRiderDashboardTasks(riderId);
+    });
+  }
+
+  Future<List<DeliveryTaskEntity>> _getRiderDashboardTasks(String riderId) async {
+    try {
+      final rows = await _database.query(
+        'delivery_tasks',
+        where: "status IN ('available', 'accepted', 'pickedUp', 'inTransit')",
+        orderBy: 'assignedAt DESC',
+      );
+
+      final all = rows.map(_taskFromRow).whereType<DeliveryTaskEntity>().toList();
+      all.sort((a, b) {
+        final aIsRider = a.status != DeliveryTaskStatus.available;
+        final bIsRider = b.status != DeliveryTaskStatus.available;
+        if (aIsRider && !bIsRider) return -1;
+        if (!aIsRider && bIsRider) return 1;
+        return b.assignedAt.compareTo(a.assignedAt);
+      });
+      return all;
+    } catch (e) {
+      debugPrint('RiderRepository._getRiderDashboardTasks error: $e');
+      return <DeliveryTaskEntity>[];
+    }
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -92,17 +89,13 @@ class RiderRepository {
 
   Future<List<DeliveryTaskEntity>> getDeliveryTasks({String? riderId}) async {
     try {
-      Query<Map<String, dynamic>> query = _firestore
-          .collection('deliveryTasks')
-          .orderBy('assignedAt', descending: true);
-      if (riderId != null) {
-        query = query.where('riderId', isEqualTo: riderId);
-      }
-      final snap = await query.get();
-      return snap.docs
-          .map((doc) => _taskFromDoc(doc))
-          .whereType<DeliveryTaskEntity>()
-          .toList();
+      final rows = await _database.query(
+        'delivery_tasks',
+        where: riderId != null && riderId.isNotEmpty ? 'riderId = ?' : null,
+        whereArgs: riderId != null && riderId.isNotEmpty ? [riderId] : null,
+        orderBy: 'assignedAt DESC',
+      );
+      return rows.map(_taskFromRow).whereType<DeliveryTaskEntity>().toList();
     } catch (e) {
       debugPrint('RiderRepository.getDeliveryTasks error: $e');
       return [];
@@ -110,74 +103,163 @@ class RiderRepository {
   }
 
   // ──────────────────────────────────────────────────────────────
-  // WRITE OPERATIONS
+  // WRITE OPERATIONS (SQLite)
   // ──────────────────────────────────────────────────────────────
 
-  /// Accepts an available task (sets riderId and status → accepted).
-  ///
-  /// Upgraded (Phase 1.3): previously a plain `update()` — two riders could
-  /// race-claim the same task and "last writer wins" silently robbed the
-  /// delivery from the first rider. Now a transaction re-reads the task and
-  /// only claims it if it is STILL `available`; the loser of the race gets a
-  /// clean `[acceptClaimParams] == false` result to show a friendly toast.
-  /// Firestore serialises transactions, so both riders can never win.
+  /// Accepts an available task atomically in SQLite.
   Future<bool> acceptTask(String taskId, String riderId) async {
-    final docRef = _firestore.collection('deliveryTasks').doc(taskId);
     try {
-      return await _firestore.runTransaction<bool>((txn) async {
-        final snap = await txn.get(docRef);
-        if (!snap.exists) return false;
-        final status = snap.data()?['status'] as String? ?? '';
-        if (status != DeliveryTaskStatus.available.name) {
-          return false; // someone else already claimed / progressed it
-        }
-        txn.update(docRef, {
+      final rows = await _database.query(
+        'delivery_tasks',
+        where: 'id = ?',
+        whereArgs: [taskId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return false;
+      final current = rows.first;
+      if (current['status'] != DeliveryTaskStatus.available.name) {
+        return false;
+      }
+
+      final now = DateTime.now().toIso8601String();
+      await _database.update(
+        'delivery_tasks',
+        {
           'riderId': riderId,
           'status': DeliveryTaskStatus.accepted.name,
-          'acceptedAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        return true;
-      });
+          'acceptedAt': now,
+          'updatedAt': now,
+        },
+        where: 'id = ?',
+        whereArgs: [taskId],
+      );
+
+      // Multi-portal sync: update order and sub-order status
+      final orderId = current['orderId']?.toString();
+      final subOrderId = current['subOrderId']?.toString();
+      if (orderId != null && subOrderId != null) {
+        final riderRows = await _database.query('users', where: 'id = ?', whereArgs: [riderId], limit: 1);
+        final riderProfileRows = await _database.query('rider_profiles', where: 'riderId = ?', whereArgs: [riderId], limit: 1);
+
+        final riderName = riderRows.isNotEmpty
+            ? riderRows.first['name']?.toString()
+            : (riderProfileRows.isNotEmpty ? riderProfileRows.first['fullName']?.toString() : 'Express Courier');
+        final riderPhone = riderRows.isNotEmpty
+            ? riderRows.first['phone']?.toString()
+            : (riderProfileRows.isNotEmpty ? riderProfileRows.first['phone']?.toString() : '');
+        final riderVehicle = riderProfileRows.isNotEmpty
+            ? '${riderProfileRows.first['vehicleType'] ?? 'Bike'} • ${riderProfileRows.first['vehicleNumber'] ?? ''}'
+            : 'Courier Motorcycle';
+
+        await _syncSubOrderStatus(
+          orderId: orderId,
+          subOrderId: subOrderId,
+          newStatus: 'riderAssigned',
+          riderId: riderId,
+          riderName: riderName,
+          riderPhone: riderPhone,
+          riderVehicle: riderVehicle,
+        );
+      }
+
+      _database.notifyTable('delivery_tasks');
+      return true;
     } catch (e) {
       debugPrint('RiderRepository.acceptTask error: $e');
       return false;
     }
   }
 
-  /// Updates the status of a delivery task.
-  Future<void> updateTaskStatus(
-      String taskId, DeliveryTaskStatus newStatus) async {
-    await _firestore.collection('deliveryTasks').doc(taskId).update({
-      'status': newStatus.name,
-      'updatedAt': FieldValue.serverTimestamp(),
-      if (newStatus == DeliveryTaskStatus.delivered)
-        'deliveredAt': FieldValue.serverTimestamp(),
-    });
+  /// Updates status of a delivery task in SQLite and synchronizes with customer and seller portals.
+  Future<void> updateTaskStatus(String taskId, DeliveryTaskStatus newStatus) async {
+    try {
+      final now = DateTime.now().toIso8601String();
+      final updates = <String, dynamic>{
+        'status': newStatus.name,
+        'updatedAt': now,
+      };
+      if (newStatus == DeliveryTaskStatus.delivered) {
+        updates['deliveredAt'] = now;
+      }
+      await _database.update(
+        'delivery_tasks',
+        updates,
+        where: 'id = ?',
+        whereArgs: [taskId],
+      );
+
+      // Fetch task to sync order
+      final taskRows = await _database.query('delivery_tasks', where: 'id = ?', whereArgs: [taskId], limit: 1);
+      if (taskRows.isNotEmpty) {
+        final orderId = taskRows.first['orderId']?.toString();
+        final subOrderId = taskRows.first['subOrderId']?.toString();
+        if (orderId != null && subOrderId != null) {
+          String mappedOrderStatus = 'inTransit';
+          if (newStatus == DeliveryTaskStatus.pickedUp) {
+            mappedOrderStatus = 'inTransit';
+          } else if (newStatus == DeliveryTaskStatus.inTransit) {
+            mappedOrderStatus = 'outForDelivery';
+          } else if (newStatus == DeliveryTaskStatus.delivered) {
+            mappedOrderStatus = 'delivered';
+          }
+          await _syncSubOrderStatus(
+            orderId: orderId,
+            subOrderId: subOrderId,
+            newStatus: mappedOrderStatus,
+          );
+        }
+      }
+
+      _database.notifyTable('delivery_tasks');
+    } catch (e) {
+      debugPrint('RiderRepository.updateTaskStatus error: $e');
+    }
   }
 
-  /// Verifies the customer OTP and marks the task as delivered.
-  ///
-  /// Returns `true` on correct OTP, `false` otherwise.
-  Future<bool> completeDeliveryWithOtp(
-      String taskId, String enteredOtp) async {
+  /// Verifies customer OTP and marks task as delivered in SQLite.
+  Future<bool> completeDeliveryWithOtp(String taskId, String enteredOtp) async {
     try {
-      final doc =
-          await _firestore.collection('deliveryTasks').doc(taskId).get();
-      if (!doc.exists) return false;
-      final storedOtp = doc.data()?['customerOtp'] as String?;
+      final rows = await _database.query(
+        'delivery_tasks',
+        where: 'id = ?',
+        whereArgs: [taskId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return false;
+      final storedOtp = rows.first['customerOtp']?.toString();
       if (storedOtp == null || storedOtp.trim() != enteredOtp.trim()) {
         return false;
       }
       await updateTaskStatus(taskId, DeliveryTaskStatus.delivered);
-      // Also update the corresponding sub-order in the orders collection
-      final orderId = doc.data()?['orderId'] as String?;
-      final subOrderId = doc.data()?['subOrderId'] as String?;
+
+      final orderId = rows.first['orderId']?.toString();
+      final subOrderId = rows.first['subOrderId']?.toString();
+      final riderId = rows.first['riderId']?.toString();
+      final earnings = (rows.first['estimatedEarnings'] as num?)?.toDouble() ??
+          (rows.first['deliveryFeeEarnings'] as num?)?.toDouble() ??
+          150.0;
+
+      // 1. Credit Rider Wallet in SQLite rider_profiles
+      if (riderId != null && riderId.isNotEmpty) {
+        final rProfiles = await _database.query('rider_profiles', where: 'riderId = ?', whereArgs: [riderId], limit: 1);
+        final currentDeliveries = rProfiles.isNotEmpty ? (rProfiles.first['totalDeliveries'] as num?)?.toInt() ?? 0 : 0;
+        final currentWallet = rProfiles.isNotEmpty ? (rProfiles.first['walletBalance'] as num?)?.toDouble() ?? 0.0 : 0.0;
+
+        await _database.insertOrReplace('rider_profiles', {
+          'riderId': riderId,
+          'totalDeliveries': currentDeliveries + 1,
+          'walletBalance': currentWallet + earnings,
+          'updatedAt': DateTime.now().toIso8601String(),
+        });
+        _database.notifyTable('rider_profiles');
+      }
+
+      // 2. Mark order and sub-orders as delivered in SQLite orders
       if (orderId != null && subOrderId != null) {
         try {
           await _updateSubOrderDelivered(orderId, subOrderId);
         } catch (e) {
-          debugPrint('updateSubOrderDelivered error (non-fatal): $e');
+          debugPrint('updateSubOrderDelivered error: $e');
         }
       }
       return true;
@@ -187,133 +269,195 @@ class RiderRepository {
     }
   }
 
-  Future<void> _updateSubOrderDelivered(
-      String orderId, String subOrderId) async {
-    final docRef = _firestore.collection('orders').doc(orderId);
-    await _firestore.runTransaction((txn) async {
-      final snap = await txn.get(docRef);
-      if (!snap.exists) return;
-      final data = snap.data()!;
-      final subOrders = List<Map<String, dynamic>>.from(
-        (data['subOrders'] as List<dynamic>? ?? []).map(
-            (s) => Map<String, dynamic>.from(s as Map)),
-      );
-      for (final sub in subOrders) {
-        if (sub['id'] == subOrderId) {
-          sub['status'] = 'delivered';
-          break;
-        }
+  Future<void> _syncSubOrderStatus({
+    required String orderId,
+    required String subOrderId,
+    required String newStatus,
+    String? riderId,
+    String? riderName,
+    String? riderPhone,
+    String? riderVehicle,
+  }) async {
+    final rows = await _database.query('orders', where: 'id = ?', whereArgs: [orderId], limit: 1);
+    if (rows.isEmpty) return;
+    final existing = Map<String, dynamic>.from(rows.first);
+
+    Map<String, dynamic> fullData = {};
+    if (existing['fullDataJson'] != null) {
+      try {
+        fullData = jsonDecode(existing['fullDataJson'] as String) as Map<String, dynamic>;
+      } catch (_) {}
+    }
+
+    final subOrders = List<Map<String, dynamic>>.from(
+      (fullData['subOrders'] as List? ?? []).map((s) => Map<String, dynamic>.from(s as Map)),
+    );
+
+    for (final sub in subOrders) {
+      if (sub['id'] == subOrderId) {
+        sub['status'] = newStatus;
+        if (riderId != null) sub['riderId'] = riderId;
+        if (riderName != null) sub['riderName'] = riderName;
+        if (riderPhone != null) sub['riderPhone'] = riderPhone;
+        if (riderVehicle != null) sub['riderVehicle'] = riderVehicle;
+        break;
       }
-      final allDelivered =
-          subOrders.every((s) => s['status'] == 'delivered');
-      txn.update(docRef, {
-        'subOrders': subOrders,
-        if (allDelivered) 'status': 'delivered',
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+    }
+
+    final now = DateTime.now().toIso8601String();
+    fullData['subOrders'] = subOrders;
+    fullData['status'] = newStatus;
+    fullData['updatedAt'] = now;
+    if (riderName != null) fullData['assignedRiderName'] = riderName;
+    if (riderPhone != null) fullData['assignedRiderPhone'] = riderPhone;
+    if (riderVehicle != null) fullData['assignedRiderVehicle'] = riderVehicle;
+
+    existing['subOrdersJson'] = jsonEncode(subOrders);
+    existing['fullDataJson'] = jsonEncode(fullData);
+    existing['status'] = newStatus;
+    existing['updatedAt'] = now;
+
+    await _database.update('orders', existing, where: 'id = ?', whereArgs: [orderId]);
+    _database.notifyTable('orders');
+  }
+
+  Future<void> _updateSubOrderDelivered(String orderId, String subOrderId) async {
+    final rows = await _database.query('orders', where: 'id = ?', whereArgs: [orderId], limit: 1);
+    if (rows.isEmpty) return;
+    final existing = Map<String, dynamic>.from(rows.first);
+
+    Map<String, dynamic> fullData = {};
+    if (existing['fullDataJson'] != null) {
+      fullData = jsonDecode(existing['fullDataJson'] as String) as Map<String, dynamic>;
+    }
+
+    final subOrders = List<Map<String, dynamic>>.from(
+      (fullData['subOrders'] as List? ?? []).map((s) => Map<String, dynamic>.from(s as Map)),
+    );
+
+    for (final sub in subOrders) {
+      if (sub['id'] == subOrderId) {
+        sub['status'] = 'delivered';
+        break;
+      }
+    }
+
+    final allDelivered = subOrders.every((s) => s['status'] == 'delivered');
+    final now = DateTime.now().toIso8601String();
+    fullData['subOrders'] = subOrders;
+    if (allDelivered) fullData['status'] = 'delivered';
+    fullData['updatedAt'] = now;
+
+    existing['subOrdersJson'] = jsonEncode(subOrders);
+    existing['fullDataJson'] = jsonEncode(fullData);
+    if (allDelivered) existing['status'] = 'delivered';
+    existing['updatedAt'] = now;
+
+    await _database.update('orders', existing, where: 'id = ?', whereArgs: [orderId]);
+    _database.notifyTable('orders');
+  }
+
+  /// Creates a delivery task document in SQLite.
+  Future<void> createDeliveryTask(DeliveryTaskEntity task, {String? orderId}) async {
+    final data = _taskToJson(task);
+    if (orderId != null) data['orderId'] = orderId;
+    final now = DateTime.now().toIso8601String();
+    data['createdAt'] = now;
+    data['updatedAt'] = now;
+    data['assignedAt'] = task.assignedAt.toIso8601String();
+
+    await _database.insertOrReplace('delivery_tasks', data);
+    _database.notifyTable('delivery_tasks');
+  }
+
+  // ──────────────────────────────────────────────────────────────
+  // RIDER EARNINGS (SQLite)
+  // ──────────────────────────────────────────────────────────────
+
+  /// Real-time stream of a rider's earnings stats from SQLite.
+  Stream<Map<String, double>> streamRiderEarnings(String riderId) async* {
+    yield await _computeRiderEarnings(riderId);
+
+    yield* _database.watchTable('delivery_tasks').asyncMap((_) async {
+      return await _computeRiderEarnings(riderId);
     });
   }
 
-  /// Creates a delivery task document (called when an order is placed or
-  /// when admin/seller assigns a rider).
-  Future<void> createDeliveryTask(DeliveryTaskEntity task,
-      {String? orderId}) async {
-    final data = _taskToJson(task);
-    if (orderId != null) data['orderId'] = orderId;
-    data['createdAt'] = FieldValue.serverTimestamp();
-    data['updatedAt'] = FieldValue.serverTimestamp();
-    data['assignedAt'] = FieldValue.serverTimestamp();
-    await _firestore.collection('deliveryTasks').doc(task.id).set(data);
-  }
-
-  // ──────────────────────────────────────────────────────────────
-  // RIDER EARNINGS
-  // ──────────────────────────────────────────────────────────────
-
-  /// Real-time stream of a rider's earnings stats.
-  Stream<Map<String, double>> streamRiderEarnings(String riderId) {
+  Future<Map<String, double>> _computeRiderEarnings(String riderId) async {
     final today = DateTime.now();
-    final startOfDay =
-        DateTime(today.year, today.month, today.day);
+    final startOfDay = DateTime(today.year, today.month, today.day);
 
-    return _firestore
-        .collection('deliveryTasks')
-        .where('riderId', isEqualTo: riderId)
-        .where('status', isEqualTo: DeliveryTaskStatus.delivered.name)
-        .snapshots()
-        .map((snap) {
+    try {
+      final rows = await _database.query(
+        'delivery_tasks',
+        where: 'riderId = ? AND status = ?',
+        whereArgs: [riderId, DeliveryTaskStatus.delivered.name],
+      );
+
       double todayEarnings = 0;
       double totalEarnings = 0;
       double codCashInHand = 0;
 
-      for (final doc in snap.docs) {
-        final data = doc.data();
-        final earnings =
-            (data['estimatedEarnings'] as num?)?.toDouble() ?? 0;
-        final cod = (data['codAmount'] as num?)?.toDouble() ?? 0;
-        final deliveredAt = data['deliveredAt'];
+      for (final row in rows) {
+        final earnings = (row['estimatedEarnings'] as num?)?.toDouble() ?? 0;
+        final cod = (row['codAmount'] as num?)?.toDouble() ?? 0;
         totalEarnings += earnings;
 
-        if (deliveredAt is Timestamp) {
-          final dt = deliveredAt.toDate();
-          if (dt.isAfter(startOfDay)) {
+        final deliveredAtStr = row['deliveredAt']?.toString() ?? row['updatedAt']?.toString();
+        if (deliveredAtStr != null) {
+          final dt = DateTime.tryParse(deliveredAtStr);
+          if (dt != null && dt.isAfter(startOfDay)) {
             todayEarnings += earnings;
             codCashInHand += cod;
           }
         }
       }
+
       return {
         'todayEarnings': todayEarnings,
         'totalEarnings': totalEarnings,
         'codCashInHand': codCashInHand,
       };
-    }).handleError((e) {
+    } catch (e) {
       debugPrint('RiderRepository.streamRiderEarnings error: $e');
       return <String, double>{};
-    });
+    }
   }
 
   // ──────────────────────────────────────────────────────────────
   // PARSING HELPERS
   // ──────────────────────────────────────────────────────────────
 
-  DeliveryTaskEntity? _taskFromDoc(
-      DocumentSnapshot<Map<String, dynamic>> doc) {
+  DeliveryTaskEntity? _taskFromRow(Map<String, dynamic> row) {
     try {
-      final data = doc.data()!;
-      final statusStr =
-          data['status'] as String? ?? DeliveryTaskStatus.available.name;
+      final statusStr = row['status'] as String? ?? DeliveryTaskStatus.available.name;
       final status = DeliveryTaskStatus.values.firstWhere(
         (e) => e.name == statusStr,
         orElse: () => DeliveryTaskStatus.available,
       );
 
-      final assignedAtRaw = data['assignedAt'];
-      final assignedAt = assignedAtRaw is Timestamp
-          ? assignedAtRaw.toDate()
-          : DateTime.tryParse(assignedAtRaw?.toString() ?? '') ?? DateTime.now();
+      final assignedAtRaw = row['assignedAt'];
+      final assignedAt = DateTime.tryParse(assignedAtRaw?.toString() ?? '') ?? DateTime.now();
 
       return DeliveryTaskEntity(
-        id: doc.id,
-        subOrderId: data['subOrderId'] as String? ?? '',
-        orderNumber: data['orderNumber'] as String? ?? '',
-        sellerStoreName: data['sellerStoreName'] as String? ?? '',
-        sellerAddress: data['sellerAddress'] as String? ?? '',
-        sellerPhone: data['sellerPhone'] as String? ?? '',
-        customerName: data['customerName'] as String? ?? '',
-        customerAddress: data['customerAddress'] as String? ?? '',
-        customerPhone: data['customerPhone'] as String? ?? '',
-        distanceKm: (data['distanceKm'] as num?)?.toDouble() ?? 0,
-        codAmount: (data['codAmount'] as num?)?.toDouble() ?? 0,
-        estimatedEarnings:
-            (data['estimatedEarnings'] as num?)?.toDouble() ?? 0,
+        id: row['id'] as String,
+        subOrderId: row['subOrderId'] as String? ?? '',
+        orderNumber: row['orderNumber'] as String? ?? '',
+        sellerStoreName: row['sellerStoreName'] as String? ?? '',
+        sellerAddress: row['sellerAddress'] as String? ?? '',
+        sellerPhone: row['sellerPhone'] as String? ?? '',
+        customerName: row['customerName'] as String? ?? '',
+        customerAddress: row['customerAddress'] as String? ?? '',
+        customerPhone: row['customerPhone'] as String? ?? '',
+        distanceKm: (row['distanceKm'] as num?)?.toDouble() ?? 0,
+        codAmount: (row['codAmount'] as num?)?.toDouble() ?? 0,
+        estimatedEarnings: (row['estimatedEarnings'] as num?)?.toDouble() ?? 0,
         status: status,
-        customerOtp: data['customerOtp'] as String? ?? '',
+        customerOtp: row['customerOtp'] as String? ?? '',
         assignedAt: assignedAt,
       );
     } catch (e) {
-      debugPrint(
-          'RiderRepository._taskFromDoc parse error for ${doc.id}: $e');
+      debugPrint('RiderRepository._taskFromRow parse error: $e');
       return null;
     }
   }

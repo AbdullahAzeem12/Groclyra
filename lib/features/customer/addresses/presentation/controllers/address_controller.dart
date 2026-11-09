@@ -63,7 +63,11 @@ class AddressController extends StateNotifier<AddressState> {
         super(const AddressState(isLoading: true)) {
     // 1. Immediately initialize with current Firebase Auth user if available
     final currentUid = _auth?.currentUser?.uid ?? '';
-    _reInitStream(currentUid);
+    if (currentUid.isNotEmpty) {
+      _reInitStream(currentUid);
+    } else {
+      state = state.copyWith(isLoading: false);
+    }
 
     // 2. Listen to Firebase Auth state changes
     _authSub = _auth?.authStateChanges().listen(_onAuthChanged);
@@ -86,20 +90,28 @@ class AddressController extends StateNotifier<AddressState> {
       activeUserId: uid,
     );
 
+    if (uid.isEmpty) return;
+
     _addressSub = _repository.streamAddresses(uid).listen(
       (list) {
         if (!mounted) return;
-        final defaultAddr = list.cast<DeliveryAddressEntity?>().firstWhere(
+        final merged = List<DeliveryAddressEntity>.from(list);
+        for (final item in state.addresses) {
+          if (item.userId == uid && !merged.any((a) => a.id == item.id)) {
+            merged.add(item);
+          }
+        }
+        final defaultAddr = merged.cast<DeliveryAddressEntity?>().firstWhere(
               (a) => a?.isDefault == true,
-              orElse: () => list.isNotEmpty ? list.first : null,
+              orElse: () => merged.isNotEmpty ? merged.first : null,
             );
         state = state.copyWith(
-          addresses: list,
+          addresses: merged,
           defaultAddress: defaultAddr,
           isLoading: false,
           clearError: true,
         );
-        debugPrint('[AddressController] Stream update: ${list.length} addresses for uid=$uid');
+        debugPrint('[AddressController] Stream update: ${merged.length} addresses for uid=$uid');
       },
       onError: (dynamic e) {
         if (!mounted) return;
@@ -140,20 +152,21 @@ class AddressController extends StateNotifier<AddressState> {
       addresses: updatedList,
       defaultAddress: shouldBeDefault ? readyAddress : (state.defaultAddress ?? readyAddress),
       isLoading: false,
+      activeUserId: effectiveUid,
     );
 
-    // 3. If stream wasn't yet open for this uid, connect it now (preserving addresses)
-    if (state.activeUserId != effectiveUid && effectiveUid.isNotEmpty) {
-      _reInitStream(effectiveUid);
-    }
-
-    // 4. Persist to Firestore
+    // 3. Persist to SQLite
     try {
       await _repository.saveAddress(readyAddress);
-      debugPrint('[AddressController] saveAddress() → Firestore write OK: ${readyAddress.formattedAddress}');
+      debugPrint('[AddressController] saveAddress() → SQLite write OK: ${readyAddress.formattedAddress}');
     } catch (e) {
       debugPrint('[AddressController] saveAddress() error: $e');
       state = state.copyWith(errorMessage: e.toString());
+    }
+
+    // 4. If stream wasn't yet open for this uid, connect it now (preserving addresses)
+    if (_addressSub == null && effectiveUid.isNotEmpty) {
+      _reInitStream(effectiveUid);
     }
   }
 

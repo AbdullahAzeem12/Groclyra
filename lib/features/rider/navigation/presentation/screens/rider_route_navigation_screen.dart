@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:groclyra/core/database/app_database.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -9,11 +9,15 @@ import 'package:go_router/go_router.dart';
 import 'package:groclyra/core/constants/app_dimensions.dart';
 import 'package:groclyra/core/services/maps_service.dart' hide LatLngPoint;
 import 'package:groclyra/core/services/maps_service.dart' as ms;
+import 'package:groclyra/core/services/location_service.dart';
+import 'package:groclyra/core/services/audio_navigation_service.dart';
+import 'package:groclyra/core/services/rider_background_location_service.dart';
 import 'package:groclyra/core/theme/theme_controller.dart';
 import 'package:groclyra/core/utils/currency_formatter.dart';
 import 'package:groclyra/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:groclyra/features/rider/domain/entities/delivery_task_entity.dart';
 import 'package:groclyra/features/rider/presentation/controllers/rider_controller.dart';
+import 'package:groclyra/features/rider/scanner/presentation/screens/order_handover_scanner_dialog.dart';
 import 'package:groclyra/routing/route_names.dart';
 import 'package:groclyra/shared/widgets/gradient_button.dart';
 
@@ -99,6 +103,7 @@ class _RiderRouteNavigationScreenState
       final riderId = ref.read(authControllerProvider).user?.id ?? '';
       if (riderId.isNotEmpty) {
         MapsService.updateRiderLocation(riderId, pos);
+        ref.read(riderBackgroundLocationProvider.notifier).startTracking(riderId);
       }
     });
   }
@@ -137,21 +142,26 @@ class _RiderRouteNavigationScreenState
 
   Future<ms.LatLngPoint?> _resolveDestination(DeliveryTaskEntity task) async {
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('deliveryTasks')
-          .doc(task.id)
-          .get();
-      final data = doc.data();
-      if (data != null) {
-        final lat = (data['customerLat'] as num?)?.toDouble();
-        final lng = (data['customerLng'] as num?)?.toDouble();
-        if (lat != null && lng != null) {
+      final rows = await AppDatabase.instance.query(
+        'delivery_tasks',
+        where: 'id = ?',
+        whereArgs: [task.id],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        final data = rows.first;
+        final lat = (data['dropLat'] as num?)?.toDouble() ??
+            (data['customerLat'] as num?)?.toDouble();
+        final lng = (data['dropLng'] as num?)?.toDouble() ??
+            (data['customerLng'] as num?)?.toDouble();
+        if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
           return ms.LatLngPoint(lat: lat, lng: lng);
         }
       }
     } catch (_) {}
 
-    return const ms.LatLngPoint(lat: 24.8607, lng: 67.0011);
+    final resolved = await LocationService().resolveAddressCoordinates(task.customerAddress);
+    return ms.LatLngPoint(lat: resolved.lat, lng: resolved.lng);
   }
 
   void _buildPolylines(ms.RouteResult route) {
@@ -242,6 +252,12 @@ class _RiderRouteNavigationScreenState
       ms.LatLngPoint(lat: nextStep.startLat, lng: nextStep.startLng),
     );
 
+    // Audio voice guidance for upcoming maneuver
+    ref.read(audioNavigationProvider).announceManeuver(
+      nextStep.instruction,
+      dist * 1000,
+    );
+
     if (dist < 0.03) {
       setState(() => _currentStepIndex++);
     }
@@ -307,6 +323,20 @@ class _RiderRouteNavigationScreenState
                 );
               },
             ),
+          IconButton(
+            icon: Icon(
+              ref.watch(audioNavigationProvider).isMuted
+                  ? Icons.volume_off_rounded
+                  : Icons.volume_up_rounded,
+              color: ref.watch(audioNavigationProvider).isMuted
+                  ? Colors.grey
+                  : Colors.amber,
+            ),
+            tooltip: ref.watch(audioNavigationProvider).isMuted
+                ? 'Unmute Voice Guidance'
+                : 'Mute Voice Guidance',
+            onPressed: () => ref.read(audioNavigationProvider).toggleMute(),
+          ),
           IconButton(
             icon: const Icon(Icons.my_location_rounded),
             tooltip: 'Re-centre',
@@ -502,13 +532,34 @@ class _RiderRouteNavigationScreenState
                       ),
                     ),
 
-                  // Arrived button → POD
-                  GradientButton(
-                    text: 'Arrived — Verify Delivery (OTP/POD)',
-                    icon: Icons.qr_code_scanner_rounded,
-                    onPressed: task != null
-                        ? () => context.push('${RouteNames.riderPod}/${task.id}')
-                        : null,
+                  // Arrived Handover: Camera Scanner & Manual OTP POD buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+                          label: const Text('Scan QR / Barcode', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            side: BorderSide(color: themeState.palette.primaryColor),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(AppDimensions.radiusMedium),
+                            ),
+                          ),
+                          onPressed: task != null ? () => _openHandoverScanner(task) : null,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: GradientButton(
+                          text: 'Verify OTP / POD',
+                          icon: Icons.check_circle_outline_rounded,
+                          onPressed: task != null
+                              ? () => context.push('${RouteNames.riderPod}/${task.id}')
+                              : null,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -516,6 +567,32 @@ class _RiderRouteNavigationScreenState
           ),
         ],
       ),
+    );
+  }
+
+  void _openHandoverScanner(DeliveryTaskEntity task) {
+    OrderHandoverScannerDialog.show(
+      context,
+      orderNumber: task.orderNumber,
+      expectedOtp: task.customerOtp,
+      onCodeVerified: (code) async {
+        final success = await ref
+            .read(riderControllerProvider.notifier)
+            .completeDeliveryWithOtp(task.id, code);
+
+        if (success && mounted) {
+          ref.read(audioNavigationProvider).announceDeliverySuccess(task.orderNumber);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Order #${task.orderNumber} successfully delivered & verified ✓'),
+              backgroundColor: Colors.green.shade700,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          );
+          context.pop();
+        }
+      },
     );
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'app.dart';
+import 'core/database/app_database.dart';
 import 'core/storage/preferences_service.dart';
 import 'core/services/rate_limit_service.dart';
 
@@ -20,6 +21,14 @@ void main() async {
     ),
   );
 
+  // Initialize Groclyra SQL Database (SQLite)
+  try {
+    await AppDatabase.instance.init();
+    debugPrint('Groclyra SQLite Database initialized successfully.');
+  } catch (e) {
+    debugPrint('Groclyra SQLite Database initialization warning: $e');
+  }
+
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -29,7 +38,7 @@ void main() async {
   }
 
   final preferencesService = await PreferencesService.create();
-  final rateLimitService = RateLimitService(preferencesService.sharedPreferences);
+  final rateLimitService = await RateLimitService.create();
 
   runApp(
     ProviderScope(

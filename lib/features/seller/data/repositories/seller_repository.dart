@@ -1,48 +1,56 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/database/app_database.dart';
 import '../../domain/entities/seller_store_entity.dart';
 import '../../../catalog/domain/entities/product_entity.dart';
 import '../../../catalog/data/repositories/catalog_repository.dart';
 
-/// Firestore-backed SellerRepository.
-///
-/// Reads the logged-in seller's store profile and products directly from
-/// Firestore — no more hardcoded 'seller_01' identity. Write operations
-/// also persist to Firestore immediately.
+/// SQL-backed SellerRepository (SQLite).
 class SellerRepository {
-  final FirebaseFirestore _firestore;
+  final AppDatabase _database;
   final CatalogRepository _catalogRepository;
 
   SellerRepository({
-    FirebaseFirestore? firestore,
+    dynamic firestore, // Kept dynamic for legacy test compatibility
     required CatalogRepository catalogRepository,
-  })  : _firestore = firestore ?? FirebaseFirestore.instance,
+    AppDatabase? database,
+  })  : _database = database ?? AppDatabase.instance,
         _catalogRepository = catalogRepository;
 
   // ──────────────────────────────────────────────────────────────
   // STORE PROFILE
   // ──────────────────────────────────────────────────────────────
 
-  /// Fetches the seller's store profile by their Firebase UID (= sellerId).
+  /// Fetches the seller's store profile by their UID (= sellerId) from SQLite.
   Future<SellerStoreEntity> getStoreProfile(String sellerId) async {
     try {
-      // Check sellerProfiles collection (written at registration)
-      final doc =
-          await _firestore.collection('sellerProfiles').doc(sellerId).get();
+      final rows = await _database.query(
+        'seller_profiles',
+        where: 'sellerId = ?',
+        whereArgs: [sellerId],
+        limit: 1,
+      );
 
-      if (doc.exists && doc.data() != null) {
-        return _storeFromDoc(sellerId, doc.data()!);
+      final userRows = await _database.query(
+        'users',
+        where: 'id = ?',
+        whereArgs: [sellerId],
+        limit: 1,
+      );
+
+      final mergedData = <String, dynamic>{};
+      if (userRows.isNotEmpty) {
+        mergedData.addAll(userRows.first);
+      }
+      if (rows.isNotEmpty) {
+        mergedData.addAll(rows.first);
       }
 
-      // Fallback: check users collection
-      final userDoc =
-          await _firestore.collection('users').doc(sellerId).get();
-      if (userDoc.exists && userDoc.data() != null) {
-        return _storeFromDoc(sellerId, userDoc.data()!);
+      if (mergedData.isNotEmpty) {
+        return _storeFromDoc(sellerId, mergedData);
       }
 
-      // Last resort: empty placeholder so UI doesn't crash
       return SellerStoreEntity(
         id: sellerId,
         sellerId: sellerId,
@@ -74,123 +82,126 @@ class SellerRepository {
     }
   }
 
-  /// Real-time stream of the seller's store profile.
-  Stream<SellerStoreEntity?> streamStoreProfile(String sellerId) {
-    return _firestore
-        .collection('sellerProfiles')
-        .doc(sellerId)
-        .snapshots()
-        .asyncMap((doc) async {
-      final mergedData = <String, dynamic>{};
+  /// Real-time stream of the seller's store profile from SQLite.
+  Stream<SellerStoreEntity?> streamStoreProfile(String sellerId) async* {
+    yield await getStoreProfile(sellerId);
 
-      // Merge primary user document (registration details)
-      try {
-        final userDoc = await _firestore.collection('users').doc(sellerId).get();
-        if (userDoc.exists && userDoc.data() != null) {
-          mergedData.addAll(userDoc.data()!);
-        }
-      } catch (_) {}
+    final controller = StreamController<SellerStoreEntity?>();
 
-      // Merge seller profile document
-      if (doc.exists && doc.data() != null) {
-        mergedData.addAll(doc.data()!);
-      }
-
-      if (mergedData.isEmpty) return null;
-      return _storeFromDoc(sellerId, mergedData);
-    }).handleError((e) {
-      debugPrint('SellerRepository.streamStoreProfile error: $e');
-      return null;
+    final sub1 = _database.watchTable('seller_profiles').listen((_) async {
+      if (!controller.isClosed) controller.add(await getStoreProfile(sellerId));
     });
+    final sub2 = _database.watchTable('users').listen((_) async {
+      if (!controller.isClosed) controller.add(await getStoreProfile(sellerId));
+    });
+
+    controller.onCancel = () {
+      sub1.cancel();
+      sub2.cancel();
+    };
+
+    yield* controller.stream;
   }
 
   // ──────────────────────────────────────────────────────────────
   // SELLER ORDERS — aggregate stats
   // ──────────────────────────────────────────────────────────────
 
-  /// Stream of seller order stats (revenue, order count) derived from Firestore.
-  ///
-  /// FIX: previously this queried `where('subOrders', arrayContains:
-  /// {'sellerId': sellerId})` — Firestore array-contains matches *whole array
-  /// elements*, so a partial map fragment never matched real orders and the
-  /// stats always silently returned zeros. Orders already carry a denormalised
-  /// `sellerIds` array (written by OrderRepository.createOrder), which is what
-  /// the seller orders stream uses, so the same field drives stats.
-  Stream<Map<String, dynamic>> streamSellerStats(String sellerId) {
-    return _firestore
-        .collection('orders')
-        .where('sellerIds', arrayContains: sellerId)
-        .snapshots()
-        .map((snap) {
-          double todayRevenue = 0;
-          double totalRevenue = 0;
-          int totalOrders = snap.docs.length;
-          final today = DateTime.now();
+  /// Stream of seller order stats (revenue, order count) derived from SQLite.
+  Stream<Map<String, dynamic>> streamSellerStats(String sellerId) async* {
+    yield await _computeSellerStats(sellerId);
 
-          for (final doc in snap.docs) {
-            final data = doc.data();
-            final subOrders =
-                List<Map<String, dynamic>>.from(data['subOrders'] as List? ?? []);
-            for (final sub in subOrders) {
-              if (sub['sellerId'] == sellerId) {
-                final amount = (sub['subtotal'] as num?)?.toDouble() ?? 0;
-                totalRevenue += amount;
-                final createdAt = data['createdAt'];
-                if (createdAt is Timestamp) {
-                  final dt = createdAt.toDate();
-                  if (dt.year == today.year &&
-                      dt.month == today.month &&
-                      dt.day == today.day) {
-                    todayRevenue += amount;
-                  }
-                }
-              }
-            }
+    yield* _database.watchTable('orders').asyncMap((_) async {
+      return await _computeSellerStats(sellerId);
+    });
+  }
+
+  Future<Map<String, dynamic>> _computeSellerStats(String sellerId) async {
+    try {
+      final rows = await _database.query(
+        'orders',
+        where: 'sellerIds LIKE ?',
+        whereArgs: ['%$sellerId%'],
+      );
+
+      double todayRevenue = 0;
+      double totalRevenue = 0;
+      int totalOrders = rows.length;
+      final today = DateTime.now();
+
+      for (final row in rows) {
+        final amount = (row['totalAmount'] as num?)?.toDouble() ?? 0;
+        totalRevenue += amount;
+        final createdStr = row['createdAt']?.toString();
+        if (createdStr != null) {
+          final dt = DateTime.tryParse(createdStr);
+          if (dt != null &&
+              dt.year == today.year &&
+              dt.month == today.month &&
+              dt.day == today.day) {
+            todayRevenue += amount;
           }
-          return {
-            'totalOrders': totalOrders,
-            'totalRevenue': totalRevenue,
-            'todayRevenue': todayRevenue,
-          };
-        }).handleError((e) {
-          debugPrint('SellerRepository.streamSellerStats error: $e');
-          return <String, dynamic>{};
-        });
+        }
+      }
+
+      return {
+        'totalOrders': totalOrders,
+        'totalRevenue': totalRevenue,
+        'todayRevenue': todayRevenue,
+      };
+    } catch (e) {
+      debugPrint('SellerRepository.streamSellerStats error: $e');
+      return <String, dynamic>{
+        'totalOrders': 0,
+        'totalRevenue': 0.0,
+        'todayRevenue': 0.0,
+      };
+    }
   }
 
   // ──────────────────────────────────────────────────────────────
   // PRODUCTS
   // ──────────────────────────────────────────────────────────────
 
-  /// One-shot fetch of all products belonging to this seller.
   Future<List<ProductEntity>> getSellerProducts(String sellerId) async {
     return _catalogRepository.getProducts(sellerId: sellerId);
   }
 
-  /// Real-time stream of this seller's products.
   Stream<List<ProductEntity>> streamSellerProducts(String sellerId) {
     return _catalogRepository.streamProducts(sellerId: sellerId);
   }
 
-  /// Writes a new product to Firestore.
   Future<void> addNewProduct(ProductEntity product) async {
     await _catalogRepository.addProduct(product);
-    // Increment sellerProfiles.totalProducts counter
-    await _firestore
-        .collection('sellerProfiles')
-        .doc(product.sellerId)
-        .set({'totalProducts': FieldValue.increment(1)}, SetOptions(merge: true));
+
+    try {
+      final rows = await _database.query(
+        'seller_profiles',
+        where: 'sellerId = ?',
+        whereArgs: [product.sellerId],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        final currentCount = (rows.first['totalProducts'] as num?)?.toInt() ?? 0;
+        await _database.update(
+          'seller_profiles',
+          {
+            'totalProducts': currentCount + 1,
+            'updatedAt': DateTime.now().toIso8601String(),
+          },
+          where: 'sellerId = ?',
+          whereArgs: [product.sellerId],
+        );
+        _database.notifyTable('seller_profiles');
+      }
+    } catch (_) {}
   }
 
-  /// Updates inventory stock for a specific variant.
-  Future<void> updateInventory(
-      String productId, String variantId, int newStock) async {
+  Future<void> updateInventory(String productId, String variantId, int newStock) async {
     await _catalogRepository.updateProductStock(productId, variantId, newStock);
   }
 
-  /// Updates arbitrary product fields (e.g. price, description, approval).
-  Future<void> updateProduct(
-      String productId, Map<String, dynamic> updates) async {
+  Future<void> updateProduct(String productId, Map<String, dynamic> updates) async {
     await _catalogRepository.updateProduct(productId, updates);
   }
 
@@ -198,29 +209,28 @@ class SellerRepository {
   // SELLER PROFILE UPDATE
   // ──────────────────────────────────────────────────────────────
 
-  /// Updates seller store profile fields in Firestore.
-  Future<void> updateStoreProfile(
-      String sellerId, Map<String, dynamic> updates) async {
+  Future<void> updateStoreProfile(String sellerId, Map<String, dynamic> updates) async {
     if (sellerId.isEmpty) {
       throw ArgumentError('Seller ID cannot be empty.');
     }
-    updates['updatedAt'] = FieldValue.serverTimestamp();
-    await _firestore
-        .collection('sellerProfiles')
-        .doc(sellerId)
-        .set(updates, SetOptions(merge: true));
+    final now = DateTime.now().toIso8601String();
+    final data = Map<String, dynamic>.from(updates);
+    data['updatedAt'] = now;
 
-    // Sync to the primary users collection as well
-    final userUpdates = <String, dynamic>{
-      'updatedAt': FieldValue.serverTimestamp(),
-    };
+    await _database.insertOrReplace('seller_profiles', {
+      'sellerId': sellerId,
+      ...data,
+    });
+    _database.notifyTable('seller_profiles');
+
+    // Sync to users table in SQLite
+    final userUpdates = <String, dynamic>{'updatedAt': now};
     if (updates.containsKey('storeName')) {
       userUpdates['storeName'] = updates['storeName'];
     }
     if (updates.containsKey('ownerName') || updates.containsKey('displayName')) {
       final nameVal = updates['ownerName'] ?? updates['displayName'];
       userUpdates['name'] = nameVal;
-      userUpdates['displayName'] = nameVal;
     }
     if (updates.containsKey('phone')) {
       userUpdates['phone'] = updates['phone'];
@@ -232,16 +242,12 @@ class SellerRepository {
       userUpdates['businessCategory'] = updates['businessCategory'];
     }
     if (updates.containsKey('logoUrl')) {
-      userUpdates['logoUrl'] = updates['logoUrl'];
-      userUpdates['avatarUrl'] = updates['logoUrl'];
-      userUpdates['profileImageBase64'] = updates['logoUrl'];
+      userUpdates['photoUrl'] = updates['logoUrl'];
     }
 
     try {
-      await _firestore
-          .collection('users')
-          .doc(sellerId)
-          .set(userUpdates, SetOptions(merge: true));
+      await _database.update('users', userUpdates, where: 'id = ?', whereArgs: [sellerId]);
+      _database.notifyTable('users');
     } catch (e) {
       debugPrint('SellerRepository.updateStoreProfile user sync warning: $e');
     }
@@ -271,6 +277,7 @@ class SellerRepository {
           data['storeAddress'] as String? ?? data['address'] as String?,
       logoUrl: data['logoUrl'] as String? ??
           data['avatarUrl'] as String? ??
+          data['photoUrl'] as String? ??
           data['profileImageBase64'] as String?,
       bannerUrl: data['bannerUrl'] as String?,
       rating: (data['rating'] as num?)?.toDouble() ?? 4.5,
@@ -280,8 +287,8 @@ class SellerRepository {
       totalRevenue: (data['totalRevenue'] as num?)?.toDouble() ?? 0,
       pendingPayout: (data['pendingPayout'] as num?)?.toDouble() ?? 0,
       lowStockCount: (data['lowStockCount'] as num?)?.toInt() ?? 0,
-      isKycApproved:
-          data['isKycApproved'] as bool? ?? (data['accountStatus'] == 'active'),
+      isKycApproved: (data['isKycApproved'] == 1 || data['isKycApproved'] == true) ||
+          (data['accountStatus'] == 'active'),
       accountStatus: data['accountStatus'] as String? ?? 'active',
     );
   }

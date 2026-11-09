@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:math';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:groclyra/core/database/app_database.dart';
 
 /// Wraps the Google Maps Directions API and device GPS.
 ///
@@ -143,32 +143,87 @@ class MapsService {
     }
   }
 
-  // ── FIRESTORE LOCATION SYNC ───────────────────────────────────────────────
+  // ── SQL LOCATION SYNC ───────────────────────────────────────────────
 
-  /// Updates `users/{riderId}` with the rider's current lat/lng, for live
-  /// tracking on the customer and admin portals.
+  /// Updates rider's current lat/lng in SQLite for live multi-portal tracking
   static Future<void> updateRiderLocation(
       String riderId, Position pos) async {
     try {
-      // Upgraded: previously `update()` failed silently when the user doc
-      // did not exist (e.g. first launch / repair scenarios); `set(merge:)`
-      // keeps the existing doc fields intact while also handling the
-      // missing-doc case.
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(riderId)
-          .set({
-        'lastLocation': {
-          'latitude': pos.latitude,
-          'longitude': pos.longitude,
-          'heading': pos.heading,
-          'speed': pos.speed,
-          'updatedAt': FieldValue.serverTimestamp(),
+      final now = DateTime.now().toIso8601String();
+
+      // 1. Persist exact GPS in rider_profiles table
+      await AppDatabase.instance.insertOrReplace('rider_profiles', {
+        'riderId': riderId,
+        'currentLat': pos.latitude,
+        'currentLng': pos.longitude,
+        'isOnline': 1,
+        'updatedAt': now,
+      });
+
+      // 2. Persist live coordinates in all active delivery tasks
+      final activeTasks = await AppDatabase.instance.query(
+        'delivery_tasks',
+        where: "riderId = ? AND status IN ('accepted', 'pickedUp', 'inTransit')",
+        whereArgs: [riderId],
+      );
+
+      for (final task in activeTasks) {
+        await AppDatabase.instance.update(
+          'delivery_tasks',
+          {
+            'riderLat': pos.latitude,
+            'riderLng': pos.longitude,
+            'updatedAt': now,
+          },
+          where: 'id = ?',
+          whereArgs: [task['id']],
+        );
+      }
+
+      // 3. Keep user profile zone updated
+      await AppDatabase.instance.update(
+        'users',
+        {
+          'deliveryZone': '${pos.latitude.toStringAsFixed(4)}, ${pos.longitude.toStringAsFixed(4)}',
+          'updatedAt': now,
         },
-      }, SetOptions(merge: true));
+        where: 'id = ?',
+        whereArgs: [riderId],
+      );
+
+      // Broadcast changes across all connected portals
+      AppDatabase.instance.notifyTable('rider_profiles');
+      AppDatabase.instance.notifyTable('delivery_tasks');
+      AppDatabase.instance.notifyTable('users');
     } catch (e) {
       debugPrint('MapsService.updateRiderLocation error: $e');
     }
+  }
+
+  /// Streams real-time rider GPS coordinates from SQLite
+  static Stream<LatLngPoint?> streamRiderLiveCoordinates(String riderId) async* {
+    Future<LatLngPoint?> fetch() async {
+      final rows = await AppDatabase.instance.query(
+        'rider_profiles',
+        where: 'riderId = ?',
+        whereArgs: [riderId],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        final lat = (rows.first['currentLat'] as num?)?.toDouble();
+        final lng = (rows.first['currentLng'] as num?)?.toDouble();
+        if (lat != null && lng != null) {
+          return LatLngPoint(lat: lat, lng: lng);
+        }
+      }
+      return null;
+    }
+
+    yield await fetch();
+
+    yield* AppDatabase.instance.watchTable('rider_profiles').asyncMap((_) async {
+      return await fetch();
+    });
   }
 
   // ── POLYLINE DECODER ──────────────────────────────────────────────────────

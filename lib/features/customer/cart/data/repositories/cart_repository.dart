@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:groclyra/core/storage/local_cache_service.dart';
-import 'package:groclyra/core/storage/preferences_service.dart';
 import 'package:groclyra/features/customer/cart/domain/entities/cart_item_entity.dart';
 import 'package:groclyra/features/catalog/domain/entities/product_entity.dart';
 
@@ -86,9 +85,7 @@ class CartRepository {
 // and evaporated on every app restart. It now constructs the real cache
 // service on top of the shared PreferencesService storage pipeline.
 final localCacheServiceProvider = Provider<LocalCacheService?>((ref) {
-  final prefs = ref.watch(preferencesServiceProvider);
-  if (prefs == null) return null;
-  return LocalCacheService(prefs.sharedPreferences);
+  return LocalCacheService();
 });
 
 final cartRepositoryProvider = Provider<CartRepository>((ref) {

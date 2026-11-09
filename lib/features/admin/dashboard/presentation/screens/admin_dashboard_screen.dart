@@ -16,6 +16,8 @@ import 'package:groclyra/features/admin/domain/entities/admin_analytics_entity.d
 import 'package:groclyra/features/admin/domain/entities/connection_status.dart';
 import 'package:groclyra/features/admin/data/repositories/admin_repository.dart';
 import 'package:groclyra/features/catalog/presentation/controllers/catalog_controller.dart';
+import 'package:groclyra/core/sync/sqlite_network_sync_service.dart';
+import '../widgets/sql_database_diagnostics_sheet.dart';
 
 class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -1491,8 +1493,9 @@ class _LiveEventsPreview extends StatelessWidget {
     if (type.contains('SELLER')) return Icons.storefront;
     if (type.contains('RIDER')) return Icons.two_wheeler;
     if (type.contains('PAYMENT')) return Icons.payments;
-    if (type.contains('PRODUCT') || type.contains('CATALOG'))
+    if (type.contains('PRODUCT') || type.contains('CATALOG')) {
       return Icons.inventory;
+    }
     if (type.contains('KYC')) return Icons.verified_user;
     return Icons.notifications;
   }
@@ -1710,15 +1713,11 @@ class _ConnectionHealthDialog extends ConsumerWidget {
             const SizedBox(height: 20),
             const Divider(color: Colors.white12),
             const SizedBox(height: 14),
+            _infoRow('Database Engine', 'SQLite (groclyra.db)', Colors.greenAccent),
+            _infoRow('Storage Architecture', 'Pure Local Relational SQL', Colors.white70),
             _infoRow('Status', state.connectionStatus.label, statusColor),
+            _infoRow('Realtime Bus', 'Active (Mutation Stream)', Colors.greenAccent),
             _infoRow('Last Sync', state.lastSyncLabel, Colors.white70),
-            _infoRow(
-              'Firestore',
-              state.connectionStatus.isHealthy ? 'Connected' : 'Error',
-              state.connectionStatus.isHealthy
-                  ? Colors.greenAccent
-                  : Colors.redAccent,
-            ),
             _infoRow(
               'Live Events',
               '${state.liveEvents.length} received',
@@ -1728,6 +1727,86 @@ class _ConnectionHealthDialog extends ConsumerWidget {
               'KYC Queue',
               'Seller: ${state.kycQueue.length}  Rider: ${state.riderKycQueue.length}',
               Colors.white70,
+            ),
+            const SizedBox(height: 6),
+            const Divider(color: Colors.white12),
+            const SizedBox(height: 6),
+            Builder(
+              builder: (ctx) {
+                final syncState = ref.watch(sqliteNetworkSyncProvider);
+                return Column(
+                  children: [
+                    _infoRow('Multi-Device Sync', syncState.mode.name, Colors.cyanAccent),
+                    _infoRow('Connected Peers', '${syncState.connectedPeersCount} active', Colors.white70),
+                    _infoRow('Sync Status', syncState.statusMessage ?? 'Active', Colors.white70),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        if (syncState.mode == SyncMode.standalone) ...[
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => ref.read(sqliteNetworkSyncProvider.notifier).startHubServer(),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Colors.cyanAccent),
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                              ),
+                              child: const Text('Start Sync Hub', style: TextStyle(color: Colors.cyanAccent, fontSize: 11)),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => _showConnectHostDialog(context, ref),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Colors.tealAccent),
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                              ),
+                              child: const Text('Connect to IP', style: TextStyle(color: Colors.tealAccent, fontSize: 11)),
+                            ),
+                          ),
+                        ] else ...[
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => ref.read(sqliteNetworkSyncProvider.notifier).stopSync(),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Colors.orangeAccent),
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                              ),
+                              child: const Text('Stop Sync Hub (Standalone)', style: TextStyle(color: Colors.orangeAccent, fontSize: 11)),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.storage_rounded, size: 16, color: Color(0xFF3B82F6)),
+                label: const Text(
+                  'SQL Engine Diagnostics & Backup',
+                  style: TextStyle(
+                    color: Color(0xFF3B82F6),
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFF3B82F6), width: 1),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.pop(context);
+                  SqlDatabaseDiagnosticsSheet.show(context);
+                },
+              ),
             ),
             if (state.errorMessage != null) ...[
               const SizedBox(height: 8),
@@ -1804,6 +1883,50 @@ class _ConnectionHealthDialog extends ConsumerWidget {
               fontWeight: FontWeight.bold,
               color: valueColor,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showConnectHostDialog(BuildContext context, WidgetRef ref) {
+    final ipController = TextEditingController(text: '192.168.1.100');
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Connect to Sync Hub'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Enter the local Wi-Fi or LAN IP address of the device hosting the Groclyra Sync Hub:',
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ipController,
+              decoration: const InputDecoration(
+                labelText: 'Hub IP Address',
+                hintText: '192.168.1.100',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final ip = ipController.text.trim();
+              if (ip.isNotEmpty) {
+                ref.read(sqliteNetworkSyncProvider.notifier).connectAsClient(ip);
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Connect'),
           ),
         ],
       ),

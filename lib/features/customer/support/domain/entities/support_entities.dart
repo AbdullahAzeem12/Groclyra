@@ -1,4 +1,4 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+// Groclyra Support Entities (SQL-backed)
 
 enum SupportSenderType {
   user('Customer'),
@@ -65,8 +65,13 @@ class SupportMessageEntity {
 
   factory SupportMessageEntity.fromMap(Map<String, dynamic> map, String docId) {
     DateTime parseDate(dynamic val) {
-      if (val is Timestamp) return val.toDate();
+      if (val is DateTime) return val;
       if (val is String) return DateTime.tryParse(val) ?? DateTime.now();
+      if (val is int) return DateTime.fromMillisecondsSinceEpoch(val);
+      try {
+        final dynamic d = val;
+        if (d != null && d.toDate != null) return d.toDate();
+      } catch (_) {}
       return DateTime.now();
     }
 
@@ -136,8 +141,13 @@ class SupportTicketEntity {
 
   factory SupportTicketEntity.fromMap(Map<String, dynamic> map, String docId) {
     DateTime parseDate(dynamic val) {
-      if (val is Timestamp) return val.toDate();
+      if (val is DateTime) return val;
       if (val is String) return DateTime.tryParse(val) ?? DateTime.now();
+      if (val is int) return DateTime.fromMillisecondsSinceEpoch(val);
+      try {
+        final dynamic d = val;
+        if (d != null && d.toDate != null) return d.toDate();
+      } catch (_) {}
       return DateTime.now();
     }
 

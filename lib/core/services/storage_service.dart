@@ -5,7 +5,7 @@ import 'package:flutter_image_compress_lite/flutter_image_compress_lite.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as path;
 
-/// Handles image picking, compression, and Base64 encoding for Firestore.
+/// Handles image picking, compression, and Base64 encoding for SQLite database storage.
 class StorageService {
   static final ImagePicker _picker = ImagePicker();
 
@@ -73,7 +73,7 @@ class StorageService {
 
   // ── BASE64 ENCODING (Replaces Firebase Storage) ─────────────────────────
 
-  /// Compresses and encodes an image to a Base64 string for direct Firestore storage.
+  /// Compresses and encodes an image to a Base64 string for direct SQLite database storage.
   ///
   /// [storagePath] is kept for compatibility but not used.
   static Future<String?> uploadImage({

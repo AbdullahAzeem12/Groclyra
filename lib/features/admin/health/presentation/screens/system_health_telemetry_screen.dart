@@ -294,7 +294,7 @@ class _OverallStatusHero extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       connectionStatus.isHealthy
-                          ? 'Firestore realtime monitoring active'
+                          ? 'SQLite realtime monitoring active'
                           : 'Monitoring stream: ${connectionStatus.label}',
                       style: const TextStyle(color: Colors.white54, fontSize: 12),
                     ),

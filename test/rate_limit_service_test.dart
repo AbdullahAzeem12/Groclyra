@@ -1,17 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:groclyra/core/services/rate_limit_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late SharedPreferences prefs;
   late RateLimitService rateLimitService;
 
-  setUp(() async {
-    SharedPreferences.setMockInitialValues({});
-    prefs = await SharedPreferences.getInstance();
-    rateLimitService = RateLimitService(prefs);
+  setUp(() {
+    rateLimitService = RateLimitService();
   });
 
   group('RateLimitService - Login Tests', () {

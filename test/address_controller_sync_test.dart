@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:groclyra/core/database/app_database.dart';
 import 'package:groclyra/features/customer/addresses/domain/entities/delivery_address_entity.dart';
 import 'package:groclyra/features/customer/addresses/data/repositories/address_repository.dart';
 import 'package:groclyra/features/customer/addresses/presentation/controllers/address_controller.dart';
@@ -9,6 +10,7 @@ void main() {
     late AddressController controller;
 
     setUp(() {
+      AppDatabase.instance.resetForTest();
       repository = AddressRepository();
       controller = AddressController(repository);
     });

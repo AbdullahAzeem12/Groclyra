@@ -210,7 +210,7 @@ class _RiderKycApprovalScreenState extends ConsumerState<RiderKycApprovalScreen>
         showThemePicker: false,
         actions: [
           IconButton(
-            tooltip: 'Live Sync from Firestore',
+            tooltip: 'Live Sync from Database',
             icon: const Icon(Icons.sync_rounded, color: Colors.white, size: 20),
             onPressed: () => ref.read(adminControllerProvider.notifier).loadDashboard(),
           ),

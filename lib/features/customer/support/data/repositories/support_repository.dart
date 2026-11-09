@@ -1,26 +1,21 @@
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:groclyra/core/database/app_database.dart';
 import 'package:groclyra/features/customer/support/domain/entities/support_entities.dart';
 
+/// Groclyra SQL-backed SupportRepository (SQLite).
 class SupportRepository {
-  final FirebaseFirestore? _explicitFirestore;
+  final AppDatabase _database;
   final List<SupportMessageEntity> _messageMemory = [];
   final List<SupportTicketEntity> _ticketMemory = [];
 
-  SupportRepository({FirebaseFirestore? firestore})
-      : _explicitFirestore = firestore {
+  SupportRepository({
+    dynamic firestore, // Kept dynamic for legacy test compatibility
+    AppDatabase? database,
+  })  : _database = database ?? AppDatabase.instance {
     _seedWelcomeIfEmpty();
-  }
-
-  FirebaseFirestore? get _firestore {
-    if (_explicitFirestore != null) return _explicitFirestore;
-    try {
-      return FirebaseFirestore.instance;
-    } catch (_) {
-      return null;
-    }
   }
 
   void _seedWelcomeIfEmpty() {
@@ -39,61 +34,82 @@ class SupportRepository {
     }
   }
 
-  Stream<List<SupportMessageEntity>> streamThreadMessages(String threadId) {
-    if (threadId.isEmpty || _firestore == null) {
-      return Stream.value(List.unmodifiable(_messageMemory));
+  Stream<List<SupportMessageEntity>> streamThreadMessages(String threadId) async* {
+    yield await getThreadMessages(threadId);
+
+    yield* _database.watchTable('support_messages').asyncMap((_) async {
+      return await getThreadMessages(threadId);
+    });
+  }
+
+  Future<List<SupportMessageEntity>> getThreadMessages(String threadId) async {
+    if (threadId.isEmpty) {
+      return List.unmodifiable(_messageMemory);
     }
 
     try {
-      return _firestore!
-          .collection('supportThreads')
-          .doc(threadId)
-          .collection('messages')
-          .orderBy('createdAt', descending: false)
-          .snapshots()
-          .map<List<SupportMessageEntity>>((snap) {
-        if (snap.docs.isEmpty) {
-          return List.unmodifiable(_messageMemory);
+      final rows = await _database.query(
+        'support_messages',
+        where: 'threadId = ?',
+        whereArgs: [threadId],
+        orderBy: 'createdAt ASC',
+      );
+
+      if (rows.isEmpty) {
+        return List.unmodifiable(_messageMemory);
+      }
+
+      final list = rows.map((r) {
+        final full = r['fullDataJson'] as String?;
+        if (full != null && full.isNotEmpty) {
+          try {
+            return SupportMessageEntity.fromMap(jsonDecode(full) as Map<String, dynamic>, r['id'] as String);
+          } catch (_) {}
         }
-        final list = snap.docs
-            .map((doc) => SupportMessageEntity.fromMap(doc.data(), doc.id))
-            .toList();
-        _messageMemory.clear();
-        _messageMemory.addAll(list);
-        return list;
-      });
-    } catch (_) {
-      return Stream.value(List.unmodifiable(_messageMemory));
+        return SupportMessageEntity.fromMap(r, r['id'] as String);
+      }).toList();
+
+      _messageMemory.clear();
+      _messageMemory.addAll(list);
+      return List.unmodifiable(list);
+    } catch (e) {
+      debugPrint('SupportRepository.getThreadMessages error: $e');
+      return List.unmodifiable(_messageMemory);
     }
   }
 
   Future<void> saveMessage(SupportMessageEntity msg) async {
     _messageMemory.add(msg);
-    if (msg.threadId.isNotEmpty && _firestore != null) {
-      try {
-        await _firestore!
-            .collection('supportThreads')
-            .doc(msg.threadId)
-            .collection('messages')
-            .doc(msg.id)
-            .set(msg.toMap(), SetOptions(merge: true));
-      } catch (e) {
-        debugPrint('SupportRepository.saveMessage error: $e');
-      }
+    try {
+      final row = <String, dynamic>{
+        'id': msg.id,
+        'threadId': msg.threadId,
+        'senderType': msg.senderType.name,
+        'text': msg.text,
+        'toolType': msg.toolType,
+        'createdAt': msg.createdAt.toIso8601String(),
+        'fullDataJson': jsonEncode(msg.toMap()),
+      };
+      await _database.insertOrReplace('support_messages', row);
+      _database.notifyTable('support_messages');
+    } catch (e) {
+      debugPrint('SupportRepository.saveMessage error: $e');
     }
   }
 
   Future<void> saveTicket(SupportTicketEntity ticket) async {
     _ticketMemory.insert(0, ticket);
-    if (_firestore != null) {
-      try {
-        await _firestore!
-            .collection('supportTickets')
-            .doc(ticket.id)
-            .set(ticket.toMap(), SetOptions(merge: true));
-      } catch (e) {
-        debugPrint('SupportRepository.saveTicket error: $e');
-      }
+    try {
+      await _database.insertOrReplace('system_telemetry', {
+        'id': ticket.id,
+        'metricName': 'support_ticket',
+        'metricValue': 1.0,
+        'tagsJson': jsonEncode(ticket.toMap()),
+        'recordedAt': DateTime.now().toIso8601String(),
+      });
+      _database.notifyTable('system_telemetry');
+    } catch (e) {
+      debugPrint('SupportRepository.saveTicket error: $e');
     }
   }
 }

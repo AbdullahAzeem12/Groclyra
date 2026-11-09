@@ -1,57 +1,94 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'package:groclyra/core/database/app_database.dart';
 import '../domain/entities/app_notification.dart';
 
-/// Firestore-backed notification repository.
-///
-/// Everything is additive: the dispatcher below is called from existing
-/// flows (`OrderRepository`, KYC review, delivery lifecycle) AFTER their
-/// original logic completes — none of those paths were modified otherwise.
+/// Groclyra SQL-backed notification repository (SQLite).
 class NotificationsRepository {
-  NotificationsRepository({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+  final AppDatabase _database;
 
-  final FirebaseFirestore _firestore;
+  NotificationsRepository({
+    dynamic firestore, // Kept dynamic for legacy test compatibility
+    AppDatabase? database,
+  }) : _database = database ?? AppDatabase.instance;
 
-  /// Real-time stream of this user's notifications, newest first.
-  Stream<List<AppNotification>> streamNotifications(String recipientId) {
-    return _firestore
-        .collection('notifications')
-        .where('recipientId', isEqualTo: recipientId)
-        .orderBy('createdAt', descending: true)
-        .limit(50)
-        .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => AppNotification.fromDoc(d.id, d.data()))
-            .toList())
-        .handleError((e) {
-      debugPrint('NotificationsRepository.streamNotifications error: $e');
-      return <AppNotification>[];
+  /// Real-time stream of this user's notifications from SQLite, newest first.
+  Stream<List<AppNotification>> streamNotifications(String recipientId) async* {
+    yield await getNotifications(recipientId);
+
+    yield* _database.watchTable('notifications').asyncMap((_) async {
+      return await getNotifications(recipientId);
     });
   }
 
-  /// Unread count for the given user (real-time).
-  Stream<int> streamUnreadCount(String recipientId) {
-    return _firestore
-        .collection('notifications')
-        .where('recipientId', isEqualTo: recipientId)
-        .where('isRead', isEqualTo: false)
-        .snapshots()
-        .map((snap) => snap.docs.length)
-        .handleError((e) {
-      debugPrint('NotificationsRepository.streamUnreadCount error: $e');
-      return 0;
+  Future<List<AppNotification>> getNotifications(String recipientId) async {
+    try {
+      final rows = await _database.query(
+        'notifications',
+        where: 'recipientId = ?',
+        whereArgs: [recipientId],
+        orderBy: 'createdAt DESC',
+        limit: 50,
+      );
+
+      return rows.map((r) {
+        Map<String, dynamic> data = const {};
+        if (r['payloadJson'] != null && r['payloadJson'].toString().isNotEmpty) {
+          try {
+            data = jsonDecode(r['payloadJson'].toString()) as Map<String, dynamic>;
+          } catch (_) {}
+        }
+        return AppNotification(
+          id: r['id'].toString(),
+          recipientId: r['recipientId']?.toString() ?? '',
+          kind: r['type']?.toString() ?? 'system',
+          title: r['title']?.toString() ?? '',
+          body: r['body']?.toString() ?? '',
+          data: data,
+          isRead: (r['isRead'] as num?)?.toInt() == 1,
+          createdAt: DateTime.tryParse(r['createdAt']?.toString() ?? '') ?? DateTime.now(),
+        );
+      }).toList();
+    } catch (e) {
+      debugPrint('NotificationsRepository.getNotifications error: $e');
+      return <AppNotification>[];
+    }
+  }
+
+  /// Unread count for the given user (real-time from SQLite).
+  Stream<int> streamUnreadCount(String recipientId) async* {
+    yield await getUnreadCount(recipientId);
+
+    yield* _database.watchTable('notifications').asyncMap((_) async {
+      return await getUnreadCount(recipientId);
     });
+  }
+
+  Future<int> getUnreadCount(String recipientId) async {
+    try {
+      final rows = await _database.query(
+        'notifications',
+        where: 'recipientId = ? AND isRead = ?',
+        whereArgs: [recipientId, 0],
+      );
+      return rows.length;
+    } catch (e) {
+      debugPrint('NotificationsRepository.getUnreadCount error: $e');
+      return 0;
+    }
   }
 
   Future<void> markRead(String notificationId) async {
     try {
-      await _firestore
-          .collection('notifications')
-          .doc(notificationId)
-          .update({'isRead': true, 'readAt': FieldValue.serverTimestamp()});
+      await _database.update(
+        'notifications',
+        {'isRead': 1},
+        where: 'id = ?',
+        whereArgs: [notificationId],
+      );
+      _database.notifyTable('notifications');
     } catch (e) {
       debugPrint('NotificationsRepository.markRead error: $e');
     }
@@ -59,21 +96,13 @@ class NotificationsRepository {
 
   Future<void> markAllRead(String recipientId) async {
     try {
-      final batch = _firestore.batch();
-      final snap = await _firestore
-          .collection('notifications')
-          .where('recipientId', isEqualTo: recipientId)
-          .where('isRead', isEqualTo: false)
-          .limit(400)
-          .get();
-      for (final doc in snap.docs) {
-        batch.update(doc.reference, {
-          'isRead': true,
-          'readAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      }
-      await batch.commit();
+      await _database.update(
+        'notifications',
+        {'isRead': 1},
+        where: 'recipientId = ? AND isRead = ?',
+        whereArgs: [recipientId, 0],
+      );
+      _database.notifyTable('notifications');
     } catch (e) {
       debugPrint('NotificationsRepository.markAllRead error: $e');
     }
@@ -81,34 +110,24 @@ class NotificationsRepository {
 
   Future<void> clearAll(String recipientId) async {
     try {
-      final snap = await _firestore
-          .collection('notifications')
-          .where('recipientId', isEqualTo: recipientId)
-          .limit(400)
-          .get();
-      if (snap.docs.isEmpty) return;
-      // Batched delete in chunks of 400.
-      for (var i = 0; i < snap.docs.length; i += 400) {
-        final chunk = snap.docs.skip(i).take(400).toList();
-        final batch = _firestore.batch();
-        for (final doc in chunk) {
-          batch.delete(doc.reference);
-        }
-        await batch.commit();
-      }
+      await _database.delete(
+        'notifications',
+        where: 'recipientId = ?',
+        whereArgs: [recipientId],
+      );
+      _database.notifyTable('notifications');
     } catch (e) {
       debugPrint('NotificationsRepository.clearAll error: $e');
     }
   }
 }
 
-/// Fire-and-forget dispatcher used by OTHER repositories to enqueue
-/// notifications. Failures never propagate to the caller flow (best-effort,
-/// never blocks order placement / KYC etc.).
+/// Fire-and-forget dispatcher used by repositories to enqueue notifications into SQLite.
 class NotificationDispatcher {
-  NotificationDispatcher(this._firestore);
+  NotificationDispatcher([dynamic firestoreOrDb])
+      : _database = firestoreOrDb is AppDatabase ? firestoreOrDb : AppDatabase.instance;
 
-  final FirebaseFirestore _firestore;
+  final AppDatabase _database;
 
   /// Sends to one recipient id.
   Future<void> toUser({
@@ -120,21 +139,24 @@ class NotificationDispatcher {
   }) async {
     if (recipientId.isEmpty) return;
     try {
-      await _firestore.collection('notifications').add({
+      final id = 'notif_${DateTime.now().millisecondsSinceEpoch}_${title.hashCode.abs()}';
+      await _database.insertOrReplace('notifications', {
+        'id': id,
         'recipientId': recipientId,
-        'kind': kind,
+        'type': kind,
         'title': title,
         'body': body,
-        'data': data,
-        'isRead': false,
-        'createdAt': FieldValue.serverTimestamp(),
+        'payloadJson': jsonEncode(data),
+        'isRead': 0,
+        'createdAt': DateTime.now().toIso8601String(),
       });
+      _database.notifyTable('notifications');
     } catch (e) {
       debugPrint('NotificationDispatcher.toUser notice: $e');
     }
   }
 
-  /// Sends to every admin (admins are few; one cheap query).
+  /// Sends to every admin in SQLite.
   Future<void> toAllAdmins({
     required String kind,
     required String title,
@@ -142,18 +164,22 @@ class NotificationDispatcher {
     Map<String, dynamic> data = const {},
   }) async {
     try {
-      final snap = await _firestore
-          .collection('users')
-          .where('role', isEqualTo: 'admin')
-          .get();
-      for (final doc in snap.docs) {
-        await toUser(
-          recipientId: doc.id,
-          kind: kind,
-          title: title,
-          body: body,
-          data: data,
-        );
+      final rows = await _database.query(
+        'users',
+        where: 'role = ?',
+        whereArgs: ['admin'],
+      );
+      for (final r in rows) {
+        final id = r['id']?.toString();
+        if (id != null && id.isNotEmpty) {
+          await toUser(
+            recipientId: id,
+            kind: kind,
+            title: title,
+            body: body,
+            data: data,
+          );
+        }
       }
     } catch (e) {
       debugPrint('NotificationDispatcher.toAllAdmins notice: $e');
@@ -169,7 +195,7 @@ final notificationsRepositoryProvider = Provider<NotificationsRepository>(
     (ref) => NotificationsRepository());
 
 final notificationDispatcherProvider = Provider<NotificationDispatcher>((ref) {
-  return NotificationDispatcher(FirebaseFirestore.instance);
+  return NotificationDispatcher();
 });
 
 /// Real-time full inbox for a user id.
@@ -188,4 +214,3 @@ final unreadNotificationsCountProvider =
       .watch(notificationsRepositoryProvider)
       .streamUnreadCount(recipientId);
 });
-

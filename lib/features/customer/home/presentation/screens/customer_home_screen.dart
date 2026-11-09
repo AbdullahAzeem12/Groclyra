@@ -122,70 +122,9 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0A0E17) : const Color(0xFFF8FAFC),
-      body: Stack(
-        children: [
-          // Ambient Background Glow Orbs matching current theme palette
-          Positioned(
-            top: 180,
-            left: -70,
-            child: IgnorePointer(
-              child: Container(
-                width: 250,
-                height: 250,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      themeState.palette.startColor.withValues(alpha: isDark ? 0.16 : 0.08),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            top: 520,
-            right: -70,
-            child: IgnorePointer(
-              child: Container(
-                width: 270,
-                height: 270,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      themeState.palette.secondaryColor.withValues(alpha: isDark ? 0.14 : 0.07),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 90,
-            left: -40,
-            child: IgnorePointer(
-              child: Container(
-                width: 220,
-                height: 220,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      themeState.palette.startColor.withValues(alpha: isDark ? 0.12 : 0.05),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          RefreshIndicator(
-            onRefresh: () => ref.read(catalogControllerProvider.notifier).loadCatalog(),
-            child: CustomScrollView(
+      body: RefreshIndicator(
+        onRefresh: () => ref.read(catalogControllerProvider.notifier).loadCatalog(),
+        child: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [
             // Custom Gradient Header Sliver
@@ -439,27 +378,27 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
                         child: Row(
                           children: [
                             _buildQuickSearchPill(
-                              label: '🍽️ Dinner Sets',
+                              label: 'Dinner Sets',
                               query: 'dinner',
                             ),
                             const SizedBox(width: 6),
                             _buildQuickSearchPill(
-                              label: '🍚 Basmati Rice',
+                              label: 'Basmati Rice',
                               query: 'rice',
                             ),
                             const SizedBox(width: 6),
                             _buildQuickSearchPill(
-                              label: '🥛 Olper\'s Milk',
+                              label: 'Olper\'s Milk',
                               query: 'milk',
                             ),
                             const SizedBox(width: 6),
                             _buildQuickSearchPill(
-                              label: '🍔 Crispy Burgers',
+                              label: 'Crispy Burgers',
                               query: 'burger',
                             ),
                             const SizedBox(width: 6),
                             _buildQuickSearchPill(
-                              label: '🍟 Loaded Fries',
+                              label: 'Loaded Fries',
                               query: 'fries',
                             ),
                           ],
@@ -1244,8 +1183,6 @@ class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
             const SliverToBoxAdapter(child: SizedBox(height: 32)),
           ],
         ),
-      ),
-        ],
       ),
     );
   }

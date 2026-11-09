@@ -68,7 +68,7 @@ class SqliteNetworkSyncNotifier extends StateNotifier<SyncStatus> {
       : super(const SyncStatus(
           mode: SyncMode.standalone,
           isConnected: false,
-          statusMessage: 'Local SQLite Standalone Mode',
+          statusMessage: 'Ready • Local Storage Active',
         )) {
     _initPreferences();
     _listenLocalDatabaseChanges();
@@ -340,7 +340,7 @@ class SqliteNetworkSyncNotifier extends StateNotifier<SyncStatus> {
     state = const SyncStatus(
       mode: SyncMode.standalone,
       isConnected: false,
-      statusMessage: 'Standalone SQLite Mode',
+      statusMessage: 'Ready • Local Storage Active',
     );
 
     _persistPreference('sync_mode', 'standalone');

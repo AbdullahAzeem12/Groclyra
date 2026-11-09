@@ -46,7 +46,7 @@ class ThemeController extends StateNotifier<ThemeState> {
 
   ThemeController([this._prefs])
       : super(ThemeState(
-          palette: _prefs?.getThemePalette() ?? AppThemePalette.synthDusk,
+          palette: _prefs?.getThemePalette() ?? AppThemePalette.emeraldMarket,
           mode: _prefs?.getThemeMode() ?? ThemeMode.system,
         )) {
     _listenToCloudTheme();

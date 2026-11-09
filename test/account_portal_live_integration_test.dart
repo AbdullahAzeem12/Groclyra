@@ -31,11 +31,11 @@ void main() {
     test('ThemeController switches palettes and persists activeThemeId', () {
       final controller = ThemeController();
 
-      expect(controller.state.palette.id, equals('synth_dusk'));
-
-      controller.setPalette(GradientPalette.emeraldMarket);
       expect(controller.state.palette.id, equals('emerald_market'));
-      expect(controller.state.palette.name, equals('Emerald Market'));
+
+      controller.setPalette(GradientPalette.synthDusk);
+      expect(controller.state.palette.id, equals('synth_dusk'));
+      expect(controller.state.palette.name, equals('Synth Dusk'));
 
       controller.setPalette(GradientPalette.midnightAurora);
       expect(controller.state.palette.id, equals('midnight_aurora'));

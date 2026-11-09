@@ -15,6 +15,7 @@ import 'daos/review_dao.dart';
 import 'daos/wishlist_dao.dart';
 import 'daos/telemetry_dao.dart';
 import 'daos/coupon_dao.dart';
+import 'daos/home_banner_dao.dart';
 import 'migrations/migration_manager.dart';
 
 /// Centralized, enterprise-grade SQLite Database engine for Groclyra.
@@ -80,6 +81,13 @@ class AppDatabase {
     await init();
     return _db;
   }, SqlRealtimeStreamManager.instance);
+
+  late final HomeBannerDao homeBannerDao = HomeBannerDao(() async {
+    await init();
+    return _db;
+  }, SqlRealtimeStreamManager.instance);
+
+  sql.Database? get database => _db;
 
   // In-memory fallback tables for tests or platforms without native SQLite bindings
   final Map<String, List<Map<String, dynamic>>> _memoryTables = {};
@@ -544,7 +552,28 @@ class AppDatabase {
       )
     ''');
 
+    // 24. Home Promotional Banners (Marketing CMS)
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS home_banners (
+        id TEXT PRIMARY KEY,
+        tag TEXT NOT NULL,
+        title TEXT NOT NULL,
+        subtitle TEXT NOT NULL,
+        badgeText TEXT NOT NULL,
+        floatingEmojis TEXT NOT NULL,
+        gradientColorsJson TEXT NOT NULL,
+        targetPillar TEXT,
+        ctaText TEXT NOT NULL,
+        isActive INTEGER DEFAULT 1,
+        displayOrder INTEGER DEFAULT 0,
+        createdAt TEXT NOT NULL
+      )
+    ''');
+
     // Indexes
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_home_banners_active ON home_banners(isActive, displayOrder);',
+    );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_cart_cache_user ON cart_cache(userId);',
     );
@@ -862,7 +891,10 @@ class AppDatabase {
     // 6. Seed Coupons
     _seedCouponsBatch(batch);
 
-    // 7. Seed Schema Migration
+    // 7. Seed Home Promotional Banners (Marketing CMS)
+    _seedHomeBannersBatch(batch);
+
+    // 8. Seed Schema Migration
     batch.insert('schema_migrations', {
       'version': 1,
       'name': 'initial_enterprise_schema_v1',
@@ -870,6 +902,71 @@ class AppDatabase {
     });
 
     await batch.commit(noResult: true);
+  }
+
+  void _seedHomeBannersBatch(sql.Batch batch) {
+    final now = DateTime.now().toIso8601String();
+    final banners = [
+      {
+        'id': 'banner_crockery',
+        'tag': '✨ ROYAL CROCKERY FESTIVAL • 35% OFF',
+        'title': 'Imperial Bone China & Crystal Dining',
+        'subtitle': 'Luxury 72-Pc Dinner Sets, Opal Glassware & Noritake Porcelain',
+        'badgeText': 'VERIFIED LUXURY',
+        'floatingEmojis': '🍽️☕🥣',
+        'gradientColorsJson': jsonEncode(['#1E1B4B', '#3730A3', '#6366F1']),
+        'targetPillar': 'crockery',
+        'ctaText': 'Explore Sets →',
+        'isActive': 1,
+        'displayOrder': 0,
+        'createdAt': now,
+      },
+      {
+        'id': 'banner_grocery',
+        'tag': '🛒 MEGA PANTRY SAVINGS • FLAT 20% OFF',
+        'title': 'Monthly Grocery Super Saver Pantry',
+        'subtitle': 'Super Basmati Rice, Pure Canola Oil & Shan Gourmet Spices',
+        'badgeText': 'SAME DAY DISPATCH',
+        'floatingEmojis': '🌾🍚🧂',
+        'gradientColorsJson': jsonEncode(['#064E3B', '#047857', '#10B981']),
+        'targetPillar': 'grocery',
+        'ctaText': 'Stock Pantry →',
+        'isActive': 1,
+        'displayOrder': 1,
+        'createdAt': now,
+      },
+      {
+        'id': 'banner_dairy',
+        'tag': '🥛 100% PURE FARM FRESH • DAILY SPECIAL',
+        'title': 'Sunrise Dairy Milk & Artisan Bakes',
+        'subtitle': 'Pure Farm Milk, Free-Range Eggs & Dawn Fresh Artisan Breads',
+        'badgeText': 'FRESH MORNING STOCK',
+        'floatingEmojis': '🥛🧀🥖',
+        'gradientColorsJson': jsonEncode(['#78350F', '#B45309', '#F59E0B']),
+        'targetPillar': 'dairyBakery',
+        'ctaText': 'View Bakery →',
+        'isActive': 1,
+        'displayOrder': 2,
+        'createdAt': now,
+      },
+      {
+        'id': 'banner_fastfood',
+        'tag': '🔥 CRAVINGS EXPRESS • FLAT 25% OFF',
+        'title': 'Crispy Broast, Burgers & Loaded Fries',
+        'subtitle': "Hot & Fresh from K&N's Deli, OPTP Grill & Partner Kitchens",
+        'badgeText': 'HOT IN 25 MINS',
+        'floatingEmojis': '🍔🍟🍗',
+        'gradientColorsJson': jsonEncode(['#881337', '#BE123C', '#FF5722']),
+        'targetPillar': 'fastFood',
+        'ctaText': 'Order Food →',
+        'isActive': 1,
+        'displayOrder': 3,
+        'createdAt': now,
+      },
+    ];
+    for (final b in banners) {
+      batch.insert('home_banners', b, conflictAlgorithm: sql.ConflictAlgorithm.ignore);
+    }
   }
 
   void _seedCouponsBatch(sql.Batch batch) {

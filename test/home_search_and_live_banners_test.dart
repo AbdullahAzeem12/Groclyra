@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:groclyra/shared/widgets/live_promo_banner_carousel.dart';
 import 'package:groclyra/shared/widgets/live_deal_countdown_badge.dart';
@@ -33,12 +34,14 @@ void main() {
       PromoBannerItem? tappedBanner;
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 360,
-              child: LivePromoBannerCarousel(
-                onBannerTap: (banner) => tappedBanner = banner,
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 360,
+                child: LivePromoBannerCarousel(
+                  onBannerTap: (banner) => tappedBanner = banner,
+                ),
               ),
             ),
           ),
@@ -66,11 +69,13 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
 
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 320,
-              child: LivePromoBannerCarousel(),
+        const ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 320,
+                child: LivePromoBannerCarousel(),
+              ),
             ),
           ),
         ),
@@ -82,11 +87,13 @@ void main() {
 
     testWidgets('Swipe to next banner updates current page and displays Grocery Offer', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: SizedBox(
-              width: 380,
-              child: LivePromoBannerCarousel(),
+        const ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 380,
+                child: LivePromoBannerCarousel(),
+              ),
             ),
           ),
         ),

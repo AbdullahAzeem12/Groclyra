@@ -424,6 +424,47 @@ class RiderRepository {
     }
   }
 
+  /// Remits collected COD cash to hub or mobile wallet agent
+  Future<bool> remitCodCash({
+    required String riderId,
+    required double amount,
+    required String channel,
+    required String referenceNumber,
+  }) async {
+    try {
+      final now = DateTime.now().toIso8601String();
+      await AppDatabase.instance.insert('admin_audit_logs', {
+        'id': 'remit_${DateTime.now().millisecondsSinceEpoch}',
+        'adminId': riderId,
+        'action': 'COD_CASH_REMITTANCE',
+        'targetType': 'RIDER_PROFILE',
+        'targetId': riderId,
+        'detailsJson': jsonEncode({
+          'amount': amount,
+          'channel': channel,
+          'referenceNumber': referenceNumber,
+          'timestamp': now,
+        }),
+        'ipAddress': '127.0.0.1 (Local Rider Device)',
+        'createdAt': now,
+      });
+
+      final db = AppDatabase.instance.database;
+      if (db != null) {
+        await db.rawUpdate('''
+          UPDATE rider_profiles 
+          SET totalCodCollected = MAX(0, totalCodCollected - ?)
+          WHERE riderId = ?
+        ''', [amount, riderId]);
+      }
+      _database.notifyTable('rider_profiles');
+      return true;
+    } catch (e) {
+      debugPrint('COD Remit error: $e');
+      return false;
+    }
+  }
+
   // ──────────────────────────────────────────────────────────────
   // PARSING HELPERS
   // ──────────────────────────────────────────────────────────────

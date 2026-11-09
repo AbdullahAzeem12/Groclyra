@@ -145,6 +145,7 @@ class OrderRepository {
     required PaymentMethod paymentMethod,
     double? customerLat,
     double? customerLng,
+    String? deliveryInstructions,
   }) async {
     // Rate limit check: Prevent customer order flooding
     if (!_rateLimitService.canPlaceOrder(customerId)) {
@@ -216,6 +217,9 @@ class OrderRepository {
       createdAt: now,
       estimatedDelivery: now.add(const Duration(hours: 48)),
       customerOtp: otp,
+      customerLat: customerLat,
+      customerLng: customerLng,
+      deliveryInstructions: deliveryInstructions,
     );
 
     // 3. Write order to SQLite

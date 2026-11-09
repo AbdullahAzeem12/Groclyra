@@ -61,6 +61,7 @@ class OrdersController extends StateNotifier<OrdersState> {
     required PaymentMethod paymentMethod,
     double? customerLat,
     double? customerLng,
+    String? deliveryInstructions,
   }) async {
     state = state.copyWith(isLoading: true);
     try {
@@ -74,6 +75,7 @@ class OrdersController extends StateNotifier<OrdersState> {
         paymentMethod: paymentMethod,
         customerLat: customerLat,
         customerLng: customerLng,
+        deliveryInstructions: deliveryInstructions,
       );
 
       state = state.copyWith(

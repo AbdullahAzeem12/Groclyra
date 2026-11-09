@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:groclyra/core/constants/app_dimensions.dart';
 import 'package:groclyra/core/services/maps_service.dart' hide LatLngPoint;
 import 'package:groclyra/core/services/maps_service.dart' as ms;
@@ -24,10 +25,7 @@ import 'package:groclyra/shared/widgets/gradient_button.dart';
 class RiderRouteNavigationScreen extends ConsumerStatefulWidget {
   final String taskId;
 
-  const RiderRouteNavigationScreen({
-    super.key,
-    required this.taskId,
-  });
+  const RiderRouteNavigationScreen({super.key, required this.taskId});
 
   @override
   ConsumerState<RiderRouteNavigationScreen> createState() =>
@@ -72,9 +70,8 @@ class _RiderRouteNavigationScreenState
     final riderState = ref.read(riderControllerProvider);
     final task = riderState.tasks.firstWhere(
       (t) => t.id == widget.taskId,
-      orElse: () => riderState.tasks.isNotEmpty
-          ? riderState.tasks.first
-          : _placeholder(),
+      orElse: () =>
+          riderState.tasks.isNotEmpty ? riderState.tasks.first : _placeholder(),
     );
     setState(() => _task = task);
 
@@ -103,7 +100,9 @@ class _RiderRouteNavigationScreenState
       final riderId = ref.read(authControllerProvider).user?.id ?? '';
       if (riderId.isNotEmpty) {
         MapsService.updateRiderLocation(riderId, pos);
-        ref.read(riderBackgroundLocationProvider.notifier).startTracking(riderId);
+        ref
+            .read(riderBackgroundLocationProvider.notifier)
+            .startTracking(riderId);
       }
     });
   }
@@ -111,7 +110,10 @@ class _RiderRouteNavigationScreenState
   Future<void> _loadRoute(Position riderPos, DeliveryTaskEntity task) async {
     setState(() => _routeLoading = true);
 
-    final origin = ms.LatLngPoint(lat: riderPos.latitude, lng: riderPos.longitude);
+    final origin = ms.LatLngPoint(
+      lat: riderPos.latitude,
+      lng: riderPos.longitude,
+    );
     final destination = await _resolveDestination(task);
 
     if (destination == null) {
@@ -150,9 +152,11 @@ class _RiderRouteNavigationScreenState
       );
       if (rows.isNotEmpty) {
         final data = rows.first;
-        final lat = (data['dropLat'] as num?)?.toDouble() ??
+        final lat =
+            (data['dropLat'] as num?)?.toDouble() ??
             (data['customerLat'] as num?)?.toDouble();
-        final lng = (data['dropLng'] as num?)?.toDouble() ??
+        final lng =
+            (data['dropLng'] as num?)?.toDouble() ??
             (data['customerLng'] as num?)?.toDouble();
         if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
           return ms.LatLngPoint(lat: lat, lng: lng);
@@ -160,7 +164,9 @@ class _RiderRouteNavigationScreenState
       }
     } catch (_) {}
 
-    final resolved = await LocationService().resolveAddressCoordinates(task.customerAddress);
+    final resolved = await LocationService().resolveAddressCoordinates(
+      task.customerAddress,
+    );
     return ms.LatLngPoint(lat: resolved.lat, lng: resolved.lng);
   }
 
@@ -195,7 +201,11 @@ class _RiderRouteNavigationScreenState
               shape: BoxShape.circle,
               boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)],
             ),
-            child: const Icon(Icons.two_wheeler_rounded, color: Colors.white, size: 22),
+            child: const Icon(
+              Icons.two_wheeler_rounded,
+              color: Colors.white,
+              size: 22,
+            ),
           ),
         ),
       );
@@ -217,7 +227,11 @@ class _RiderRouteNavigationScreenState
               shape: BoxShape.circle,
               boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4)],
             ),
-            child: const Icon(Icons.location_on_rounded, color: Colors.white, size: 22),
+            child: const Icon(
+              Icons.location_on_rounded,
+              color: Colors.white,
+              size: 22,
+            ),
           ),
         ),
       );
@@ -227,17 +241,16 @@ class _RiderRouteNavigationScreenState
   void _fitBounds(LatLng sw, LatLng ne) {
     final bounds = LatLngBounds(
       LatLng(
-          sw.latitude < ne.latitude ? sw.latitude : ne.latitude,
-          sw.longitude < ne.longitude ? sw.longitude : ne.longitude),
+        sw.latitude < ne.latitude ? sw.latitude : ne.latitude,
+        sw.longitude < ne.longitude ? sw.longitude : ne.longitude,
+      ),
       LatLng(
-          sw.latitude > ne.latitude ? sw.latitude : ne.latitude,
-          sw.longitude > ne.longitude ? sw.longitude : ne.longitude),
+        sw.latitude > ne.latitude ? sw.latitude : ne.latitude,
+        sw.longitude > ne.longitude ? sw.longitude : ne.longitude,
+      ),
     );
     _mapController.fitCamera(
-      CameraFit.bounds(
-        bounds: bounds,
-        padding: const EdgeInsets.all(50.0),
-      ),
+      CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50.0)),
     );
   }
 
@@ -253,10 +266,9 @@ class _RiderRouteNavigationScreenState
     );
 
     // Audio voice guidance for upcoming maneuver
-    ref.read(audioNavigationProvider).announceManeuver(
-      nextStep.instruction,
-      dist * 1000,
-    );
+    ref
+        .read(audioNavigationProvider)
+        .announceManeuver(nextStep.instruction, dist * 1000);
 
     if (dist < 0.03) {
       setState(() => _currentStepIndex++);
@@ -264,22 +276,22 @@ class _RiderRouteNavigationScreenState
   }
 
   DeliveryTaskEntity _placeholder() => DeliveryTaskEntity(
-        id: widget.taskId,
-        subOrderId: '',
-        orderNumber: '---',
-        sellerStoreName: '',
-        sellerAddress: '',
-        sellerPhone: '',
-        customerName: 'Customer',
-        customerAddress: 'Loading...',
-        customerPhone: '',
-        distanceKm: 0,
-        codAmount: 0,
-        estimatedEarnings: 0,
-        status: DeliveryTaskStatus.accepted,
-        customerOtp: '',
-        assignedAt: DateTime.now(),
-      );
+    id: widget.taskId,
+    subOrderId: '',
+    orderNumber: '---',
+    sellerStoreName: '',
+    sellerAddress: '',
+    sellerPhone: '',
+    customerName: 'Customer',
+    customerAddress: 'Loading...',
+    customerPhone: '',
+    distanceKm: 0,
+    codAmount: 0,
+    estimatedEarnings: 0,
+    status: DeliveryTaskStatus.accepted,
+    customerOtp: '',
+    assignedAt: DateTime.now(),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -288,9 +300,11 @@ class _RiderRouteNavigationScreenState
     final task = _task;
     final route = _route;
     final currentStep =
-        (route != null && route.steps.isNotEmpty && _currentStepIndex < route.steps.length)
-            ? route.steps[_currentStepIndex]
-            : null;
+        (route != null &&
+            route.steps.isNotEmpty &&
+            _currentStepIndex < route.steps.length)
+        ? route.steps[_currentStepIndex]
+        : null;
 
     final initialCenter = _currentPosition != null
         ? LatLng(_currentPosition!.latitude, _currentPosition!.longitude)
@@ -343,7 +357,10 @@ class _RiderRouteNavigationScreenState
             onPressed: () {
               if (_currentPosition != null) {
                 _mapController.move(
-                  LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+                  LatLng(
+                    _currentPosition!.latitude,
+                    _currentPosition!.longitude,
+                  ),
                   16,
                 );
               }
@@ -368,12 +385,8 @@ class _RiderRouteNavigationScreenState
                       urlTemplate: tileUrl,
                       userAgentPackageName: 'com.example.groclyra',
                     ),
-                    PolylineLayer(
-                      polylines: _polylines,
-                    ),
-                    MarkerLayer(
-                      markers: _markers,
-                    ),
+                    PolylineLayer(polylines: _polylines),
+                    MarkerLayer(markers: _markers),
                   ],
                 ),
 
@@ -385,7 +398,9 @@ class _RiderRouteNavigationScreenState
                       child: Center(
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 14),
+                            horizontal: 20,
+                            vertical: 14,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
@@ -396,11 +411,18 @@ class _RiderRouteNavigationScreenState
                               SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               ),
                               SizedBox(width: 12),
-                              Text('Calculating Route…',
-                                  style: TextStyle(fontWeight: FontWeight.w600, color: Colors.black)),
+                              Text(
+                                'Calculating Route…',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -430,8 +452,9 @@ class _RiderRouteNavigationScreenState
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF121722) : Colors.white,
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(20)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.12),
@@ -452,21 +475,47 @@ class _RiderRouteNavigationScreenState
                     children: [
                       if (task != null)
                         Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Row(
                             children: [
-                              Text(
-                                task.customerName,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold, fontSize: 15),
-                                overflow: TextOverflow.ellipsis,
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      task.customerName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    Text(
+                                      task.customerAddress,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
                               ),
-                              Text(
-                                task.customerAddress,
-                                style: const TextStyle(
-                                    fontSize: 12, color: Colors.grey),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.phone_rounded,
+                                  color: Colors.green,
+                                  size: 22,
+                                ),
+                                tooltip: 'Call Customer',
+                                onPressed: () async {
+                                  final cleanPhone = task.customerPhone
+                                      .replaceAll(RegExp(r'[^\d+]'), '');
+                                  final uri = Uri.parse('tel:$cleanPhone');
+                                  if (await canLaunchUrl(uri)) {
+                                    await launchUrl(uri);
+                                  }
+                                },
                               ),
                             ],
                           ),
@@ -486,13 +535,53 @@ class _RiderRouteNavigationScreenState
                             Text(
                               route.formattedDistance,
                               style: const TextStyle(
-                                  fontSize: 11, color: Colors.grey),
+                                fontSize: 11,
+                                color: Colors.grey,
+                              ),
                             ),
                           ],
                         ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
+
+                  // Customer Doorstep Care Instructions
+                  if (task != null)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: Colors.amber.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.shield_rounded,
+                            color: Colors.amber,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              task.deliveryInstructions ??
+                                  '📦 Fragile Crockery: Handle with extra care',
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.amber,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   const Divider(height: 1),
                   const SizedBox(height: 10),
 
@@ -505,28 +594,36 @@ class _RiderRouteNavigationScreenState
                         color: Colors.green.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                            color: Colors.green.withValues(alpha: 0.4)),
+                          color: Colors.green.withValues(alpha: 0.4),
+                        ),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Row(
                             children: [
-                              Icon(Icons.payments_rounded,
-                                  color: Colors.green, size: 18),
+                              Icon(
+                                Icons.payments_rounded,
+                                color: Colors.green,
+                                size: 18,
+                              ),
                               SizedBox(width: 6),
-                              Text('Collect Cash (COD):',
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600)),
+                              Text(
+                                'Collect Cash (COD):',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ],
                           ),
                           Text(
                             CurrencyFormatter.format(task.codAmount),
                             style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green),
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                            ),
                           ),
                         ],
                       ),
@@ -537,16 +634,31 @@ class _RiderRouteNavigationScreenState
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
-                          label: const Text('Scan QR / Barcode', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            side: BorderSide(color: themeState.palette.primaryColor),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(AppDimensions.radiusMedium),
+                          icon: const Icon(
+                            Icons.qr_code_scanner_rounded,
+                            size: 18,
+                          ),
+                          label: const Text(
+                            'Scan QR / Barcode',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                          onPressed: task != null ? () => _openHandoverScanner(task) : null,
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            side: BorderSide(
+                              color: themeState.palette.primaryColor,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppDimensions.radiusMedium,
+                              ),
+                            ),
+                          ),
+                          onPressed: task != null
+                              ? () => _openHandoverScanner(task)
+                              : null,
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -555,7 +667,9 @@ class _RiderRouteNavigationScreenState
                           text: 'Verify OTP / POD',
                           icon: Icons.check_circle_outline_rounded,
                           onPressed: task != null
-                              ? () => context.push('${RouteNames.riderPod}/${task.id}')
+                              ? () => context.push(
+                                  '${RouteNames.riderPod}/${task.id}',
+                                )
                               : null,
                         ),
                       ),
@@ -581,13 +695,19 @@ class _RiderRouteNavigationScreenState
             .completeDeliveryWithOtp(task.id, code);
 
         if (success && mounted) {
-          ref.read(audioNavigationProvider).announceDeliverySuccess(task.orderNumber);
+          ref
+              .read(audioNavigationProvider)
+              .announceDeliverySuccess(task.orderNumber);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Order #${task.orderNumber} successfully delivered & verified ✓'),
+              content: Text(
+                'Order #${task.orderNumber} successfully delivered & verified ✓',
+              ),
               backgroundColor: Colors.green.shade700,
               behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
           );
           context.pop();

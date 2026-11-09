@@ -227,22 +227,26 @@ void main() {
       expect(find.text('Riders'), findsOneWidget);
 
       // The KYC sections live below the fold on a 640-tall viewport —
-      // scroll to them before asserting.
-      await tester.scrollUntilVisible(
-        find.text('Rider KYC Applications'),
-        250,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.pump(const Duration(milliseconds: 120));
-      expect(find.text('Rider KYC Applications'), findsOneWidget);
-
+      // scroll to them in natural top-down order before asserting.
       await tester.scrollUntilVisible(
         find.text('Seller KYC Applications'),
-        250,
+        100,
         scrollable: find.byType(Scrollable).first,
       );
-      await tester.pump(const Duration(milliseconds: 120));
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 120));
+      }
       expect(find.text('Seller KYC Applications'), findsOneWidget);
+
+      await tester.scrollUntilVisible(
+        find.text('Rider KYC Applications'),
+        100,
+        scrollable: find.byType(Scrollable).first,
+      );
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 120));
+      }
+      expect(find.text('Rider KYC Applications'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

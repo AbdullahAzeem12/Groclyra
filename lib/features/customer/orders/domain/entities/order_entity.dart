@@ -108,6 +108,9 @@ class OrderEntity {
   final String? customerOtp;
   final double? customerLat;
   final double? customerLng;
+  final String? deliveryInstructions;
+  final String? podPhotoUrl;
+  final String? podSignatureUrl;
 
   const OrderEntity({
     required this.id,
@@ -127,10 +130,15 @@ class OrderEntity {
     this.customerOtp = '4829',
     this.customerLat,
     this.customerLng,
+    this.deliveryInstructions,
+    this.podPhotoUrl,
+    this.podSignatureUrl,
   });
 
   int get totalItemCount => subOrders.fold<int>(
       0, (sum, sub) => sum + sub.items.fold<int>(0, (subSum, it) => subSum + it.quantity));
+
+  double get subtotal => subOrders.fold<double>(0.0, (sum, sub) => sum + sub.subtotal);
 
   String get deliveryOtpPin => customerOtp ?? '4829';
   String? get assignedRiderName => subOrders.firstOrNull?.riderName ?? 'Muhammad Bilal';
@@ -155,6 +163,9 @@ class OrderEntity {
         'customerOtp': customerOtp,
         'customerLat': customerLat,
         'customerLng': customerLng,
+        'deliveryInstructions': deliveryInstructions,
+        'podPhotoUrl': podPhotoUrl,
+        'podSignatureUrl': podSignatureUrl,
       };
 
   factory OrderEntity.fromJson(Map<String, dynamic> json) => OrderEntity(
@@ -178,5 +189,8 @@ class OrderEntity {
         customerOtp: json['customerOtp'] ?? '4829',
         customerLat: (json['customerLat'] as num?)?.toDouble(),
         customerLng: (json['customerLng'] as num?)?.toDouble(),
+        deliveryInstructions: json['deliveryInstructions'],
+        podPhotoUrl: json['podPhotoUrl'],
+        podSignatureUrl: json['podSignatureUrl'],
       );
 }

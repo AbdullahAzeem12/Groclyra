@@ -4,9 +4,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:groclyra/core/constants/app_dimensions.dart';
 import 'package:groclyra/core/database/app_database.dart';
 import 'package:groclyra/core/services/location_service.dart';
+import 'package:groclyra/core/services/pdf_invoice_generator.dart';
 import 'package:groclyra/core/theme/theme_controller.dart';
 import 'package:groclyra/core/utils/date_time_formatter.dart';
 import 'package:groclyra/features/customer/orders/data/repositories/order_repository.dart';
@@ -17,17 +19,15 @@ import 'package:groclyra/shared/widgets/app_toggle_message.dart';
 class LiveOrderTrackingScreen extends ConsumerStatefulWidget {
   final String orderId;
 
-  const LiveOrderTrackingScreen({
-    super.key,
-    required this.orderId,
-  });
+  const LiveOrderTrackingScreen({super.key, required this.orderId});
 
   @override
   ConsumerState<LiveOrderTrackingScreen> createState() =>
       _LiveOrderTrackingScreenState();
 }
 
-class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScreen> {
+class _LiveOrderTrackingScreenState
+    extends ConsumerState<LiveOrderTrackingScreen> {
   final MapController _mapController = MapController();
 
   OrderEntity? _order;
@@ -85,7 +85,8 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
       double dropLat = (task?['dropLat'] as num?)?.toDouble() ?? 0.0;
       double dropLng = (task?['dropLng'] as num?)?.toDouble() ?? 0.0;
       if (dropLat == 0.0 || dropLng == 0.0) {
-        if (fetchedOrder?.customerLat != null && fetchedOrder?.customerLng != null) {
+        if (fetchedOrder?.customerLat != null &&
+            fetchedOrder?.customerLng != null) {
           dropLat = fetchedOrder!.customerLat!;
           dropLng = fetchedOrder.customerLng!;
         } else if (fetchedOrder?.deliveryAddress != null) {
@@ -189,7 +190,8 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = themeState.palette.primaryColor;
 
-    final order = _order ??
+    final order =
+        _order ??
         ordersState.orders.firstWhere(
           (o) => o.id == widget.orderId,
           orElse: () => ordersState.orders.isNotEmpty
@@ -208,8 +210,12 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
                   status: OrderStatus.inTransit,
                   customerOtp: '4821',
                   paymentMethod: PaymentMethod.cashOnDelivery,
-                  createdAt: DateTime.now().subtract(const Duration(minutes: 25)),
-                  estimatedDelivery: DateTime.now().add(const Duration(hours: 1)),
+                  createdAt: DateTime.now().subtract(
+                    const Duration(minutes: 25),
+                  ),
+                  estimatedDelivery: DateTime.now().add(
+                    const Duration(hours: 1),
+                  ),
                 ),
         );
 
@@ -221,19 +227,28 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
     final dropPoint = _dropPoint ?? const LatLng(31.5204, 74.3587);
     final pickupPoint = _pickupPoint ?? const LatLng(31.4980, 74.3300);
 
-    final isDelivered = order.status == OrderStatus.delivered ||
+    final isDelivered =
+        order.status == OrderStatus.delivered ||
         _taskData?['status'] == 'delivered';
-    final isInTransit = order.status == OrderStatus.inTransit ||
+    final isInTransit =
+        order.status == OrderStatus.inTransit ||
         order.status == OrderStatus.outForDelivery ||
         _taskData?['status'] == 'inTransit';
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0D1117) : const Color(0xFFF8FAFC),
+      backgroundColor: isDark
+          ? const Color(0xFF0D1117)
+          : const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: Text('Live Tracking #${order.orderNumber}'),
         backgroundColor: isDark ? const Color(0xFF161B22) : Colors.white,
         elevation: 0,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf_rounded),
+            tooltip: 'Tax Invoice (PDF)',
+            onPressed: () => _showInvoiceOptions(context, order),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Refresh Status',
@@ -286,10 +301,15 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
                                     decoration: BoxDecoration(
                                       color: Colors.blue.shade700,
                                       shape: BoxShape.circle,
-                                      border: Border.all(color: Colors.white, width: 2),
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 2,
+                                      ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.black.withValues(alpha: 0.3),
+                                          color: Colors.black.withValues(
+                                            alpha: 0.3,
+                                          ),
                                           blurRadius: 6,
                                         ),
                                       ],
@@ -310,10 +330,15 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
                                     decoration: BoxDecoration(
                                       color: Colors.red.shade600,
                                       shape: BoxShape.circle,
-                                      border: Border.all(color: Colors.white, width: 2),
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 2,
+                                      ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.black.withValues(alpha: 0.3),
+                                          color: Colors.black.withValues(
+                                            alpha: 0.3,
+                                          ),
                                           blurRadius: 6,
                                         ),
                                       ],
@@ -336,12 +361,18 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
                                       Container(
                                         padding: const EdgeInsets.all(8),
                                         decoration: BoxDecoration(
-                                          gradient: themeState.palette.linearGradient,
+                                          gradient:
+                                              themeState.palette.linearGradient,
                                           shape: BoxShape.circle,
-                                          border: Border.all(color: Colors.white, width: 2),
+                                          border: Border.all(
+                                            color: Colors.white,
+                                            width: 2,
+                                          ),
                                           boxShadow: [
                                             BoxShadow(
-                                              color: primary.withValues(alpha: 0.6),
+                                              color: primary.withValues(
+                                                alpha: 0.6,
+                                              ),
                                               blurRadius: 10,
                                               spreadRadius: 2,
                                             ),
@@ -369,18 +400,28 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
                             children: [
                               FloatingActionButton.small(
                                 heroTag: 'recenter_rider_btn',
-                                backgroundColor: isDark ? const Color(0xFF161B22) : Colors.white,
+                                backgroundColor: isDark
+                                    ? const Color(0xFF161B22)
+                                    : Colors.white,
                                 foregroundColor: primary,
                                 onPressed: _recenterMap,
-                                child: const Icon(Icons.my_location_rounded, size: 20),
+                                child: const Icon(
+                                  Icons.my_location_rounded,
+                                  size: 20,
+                                ),
                               ),
                               const SizedBox(height: 8),
                               FloatingActionButton.small(
                                 heroTag: 'fit_route_btn',
-                                backgroundColor: isDark ? const Color(0xFF161B22) : Colors.white,
+                                backgroundColor: isDark
+                                    ? const Color(0xFF161B22)
+                                    : Colors.white,
                                 foregroundColor: primary,
                                 onPressed: _fitRouteBounds,
-                                child: const Icon(Icons.route_rounded, size: 20),
+                                child: const Icon(
+                                  Icons.route_rounded,
+                                  size: 20,
+                                ),
                               ),
                             ],
                           ),
@@ -391,10 +432,15 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
                           left: 16,
                           bottom: 12,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               color: isDark
-                                  ? const Color(0xFF161B22).withValues(alpha: 0.95)
+                                  ? const Color(
+                                      0xFF161B22,
+                                    ).withValues(alpha: 0.95)
                                   : Colors.white.withValues(alpha: 0.95),
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: [
@@ -422,12 +468,14 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
                                   isDelivered
                                       ? 'Order Delivered ✓'
                                       : isInTransit
-                                          ? '$_estimatedMinutes mins (${_distanceRemainingKm.toStringAsFixed(1)} km away)'
-                                          : 'Rider reaching merchant',
+                                      ? '$_estimatedMinutes mins (${_distanceRemainingKm.toStringAsFixed(1)} km away)'
+                                      : 'Rider reaching merchant',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 12,
-                                    color: isDark ? Colors.white : Colors.black87,
+                                    color: isDark
+                                        ? Colors.white
+                                        : Colors.black87,
                                   ),
                                 ),
                               ],
@@ -449,7 +497,9 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
                             gradient: themeState.palette.subtleGradient,
-                            borderRadius: BorderRadius.circular(AppDimensions.radiusMedium),
+                            borderRadius: BorderRadius.circular(
+                              AppDimensions.radiusMedium,
+                            ),
                             border: Border.all(
                               color: primary.withValues(alpha: 0.3),
                             ),
@@ -462,7 +512,11 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
                                   color: primary.withValues(alpha: 0.12),
                                   shape: BoxShape.circle,
                                 ),
-                                child: Icon(Icons.shield_rounded, color: primary, size: 28),
+                                child: Icon(
+                                  Icons.shield_rounded,
+                                  color: primary,
+                                  size: 28,
+                                ),
                               ),
                               const SizedBox(width: 14),
                               Expanded(
@@ -471,13 +525,18 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
                                   children: [
                                     const Text(
                                       'Handover Verification PIN (OTP)',
-                                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey,
+                                      ),
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
                                       order.deliveryOtpPin.isNotEmpty
                                           ? order.deliveryOtpPin
-                                          : (_taskData?['customerOtp']?.toString() ?? '5824'),
+                                          : (_taskData?['customerOtp']
+                                                    ?.toString() ??
+                                                '5824'),
                                       style: TextStyle(
                                         fontSize: 26,
                                         fontWeight: FontWeight.bold,
@@ -487,7 +546,10 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
                                     ),
                                     const Text(
                                       'Share this 4-digit code with the rider only after receiving your packages.',
-                                      style: TextStyle(fontSize: 10, color: Colors.grey),
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Colors.grey,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -498,7 +560,9 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
                                 onPressed: () {
                                   final pin = order.deliveryOtpPin.isNotEmpty
                                       ? order.deliveryOtpPin
-                                      : (_taskData?['customerOtp']?.toString() ?? '5824');
+                                      : (_taskData?['customerOtp']
+                                                ?.toString() ??
+                                            '5824');
                                   Clipboard.setData(ClipboardData(text: pin));
                                   AppToggleMessage.info(
                                     context,
@@ -518,18 +582,26 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
 
                         // Route & Delivery Destination Card
                         _buildAddressCard(context, order, isDark, primary),
+                        const SizedBox(height: 16),
+
+                        // Doorstep Instructions Card
+                        _buildDoorstepInstructionsCard(order, isDark, primary),
                         const SizedBox(height: 24),
 
                         // Real-time Delivery Stepper Pipeline
                         Text(
                           'Live Delivery Milestones',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 14),
 
-                        _buildRealtimeStepper(context, themeState, isDark, order),
+                        _buildRealtimeStepper(
+                          context,
+                          themeState,
+                          isDark,
+                          order,
+                        ),
                         const SizedBox(height: 40),
                       ],
                     ),
@@ -546,17 +618,21 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
     bool isDark,
     Color primary,
   ) {
-    final riderName = order.assignedRiderName ??
+    final riderName =
+        order.assignedRiderName ??
         _taskData?['riderName']?.toString() ??
         'Hamza Tariq';
-    final riderPhone = order.assignedRiderPhone ??
+    final riderPhone =
+        order.assignedRiderPhone ??
         _taskData?['riderPhone']?.toString() ??
         '+92 321 8847291';
-    final riderVehicle = order.assignedRiderVehicle ??
+    final riderVehicle =
+        order.assignedRiderVehicle ??
         _taskData?['riderVehicle']?.toString() ??
         'Honda 125 • KHI-LEJ-4821';
 
-    final hasRider = order.status != OrderStatus.paymentPending &&
+    final hasRider =
+        order.status != OrderStatus.paymentPending &&
         order.status != OrderStatus.paid;
 
     return Container(
@@ -582,7 +658,10 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
               children: [
                 Text(
                   hasRider ? riderName : 'Assigning Courier...',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -596,16 +675,174 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
             IconButton(
               icon: const Icon(Icons.phone_rounded, color: Colors.green),
               tooltip: 'Call Rider',
-              onPressed: () {
-                AppToggleMessage.info(
-                  context,
-                  'Initiating secure call to Rider: $riderPhone',
-                  title: 'Contacting Rider',
-                );
+              onPressed: () async {
+                final cleanPhone = riderPhone.replaceAll(RegExp(r'[^\d+]'), '');
+                final uri = Uri.parse('tel:$cleanPhone');
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri);
+                } else {
+                  if (context.mounted) {
+                    AppToggleMessage.info(
+                      context,
+                      'Rider Phone: $riderPhone',
+                      title: 'Calling Courier',
+                    );
+                  }
+                }
               },
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDoorstepInstructionsCard(
+    OrderEntity order,
+    bool isDark,
+    Color primary,
+  ) {
+    final instructions =
+        order.deliveryInstructions ?? '📦 Fragile Crockery: Handle with care';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF161B22) : Colors.white,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMedium),
+        border: Border.all(
+          color: Colors.amber.withValues(alpha: 0.4),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.shield_rounded, color: Colors.amber, size: 18),
+              const SizedBox(width: 8),
+              const Text(
+                'Doorstep Instructions & Care Note',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  'PRIORITY',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.amber,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            instructions,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white70 : const Color(0xFF334155),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showInvoiceOptions(BuildContext context, OrderEntity order) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.receipt_long_rounded,
+                      color: Color(0xFF4F46E5),
+                      size: 24,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Tax Invoice #${order.orderNumber}',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const Text(
+                            'Official tax receipt • PK-NTN-9482019-3',
+                            style: TextStyle(fontSize: 11, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(
+                    Icons.share_rounded,
+                    color: Color(0xFF4F46E5),
+                  ),
+                  title: const Text(
+                    'Download & Share PDF',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'Share invoice via WhatsApp, Email, or Save to Files',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    PdfInvoiceGenerator.shareInvoice(order);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.print_rounded,
+                    color: Color(0xFF059669),
+                  ),
+                  title: const Text(
+                    'Print Official Invoice',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'Send document directly to wireless or local printer',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    PdfInvoiceGenerator.printInvoice(order);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -615,9 +852,13 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
     bool isDark,
     Color primary,
   ) {
-    final storeName = _taskData?['sellerStoreName']?.toString() ??
-        (order.subOrders.isNotEmpty ? order.subOrders.first.sellerName : 'Groclyra Superstore');
-    final storeAddress = _taskData?['sellerAddress']?.toString() ??
+    final storeName =
+        _taskData?['sellerStoreName']?.toString() ??
+        (order.subOrders.isNotEmpty
+            ? order.subOrders.first.sellerName
+            : 'Groclyra Superstore');
+    final storeAddress =
+        _taskData?['sellerAddress']?.toString() ??
         'Main Commercial Market, Block 4, Clifton';
 
     return Container(
@@ -643,7 +884,10 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
                   children: [
                     Text(
                       'Pickup: $storeName',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     Text(
                       storeAddress,
@@ -667,7 +911,11 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.location_on_rounded, size: 18, color: Colors.red),
+              const Icon(
+                Icons.location_on_rounded,
+                size: 18,
+                color: Colors.red,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -675,7 +923,10 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
                   children: [
                     Text(
                       'Deliver to: ${order.customerName}',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     Text(
                       order.deliveryAddress,
@@ -703,9 +954,10 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
     final taskStatus = _taskData?['status']?.toString();
 
     const isPaid = true;
-    final isPacked = status != OrderStatus.paymentPending &&
-        status != OrderStatus.cancelled;
-    final isRiderAssigned = isPacked &&
+    final isPacked =
+        status != OrderStatus.paymentPending && status != OrderStatus.cancelled;
+    final isRiderAssigned =
+        isPacked &&
         (status == OrderStatus.riderAssigned ||
             status == OrderStatus.inTransit ||
             status == OrderStatus.outForDelivery ||
@@ -714,14 +966,16 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
             taskStatus == 'pickedUp' ||
             taskStatus == 'inTransit' ||
             taskStatus == 'delivered');
-    final isInTransit = isRiderAssigned &&
+    final isInTransit =
+        isRiderAssigned &&
         (status == OrderStatus.inTransit ||
             status == OrderStatus.outForDelivery ||
             status == OrderStatus.delivered ||
             taskStatus == 'pickedUp' ||
             taskStatus == 'inTransit' ||
             taskStatus == 'delivered');
-    final isDelivered = status == OrderStatus.delivered || taskStatus == 'delivered';
+    final isDelivered =
+        status == OrderStatus.delivered || taskStatus == 'delivered';
 
     return Column(
       children: [
@@ -740,7 +994,9 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
           themeState: themeState,
           isDark: isDark,
           title: 'Packed & Verified by Merchants',
-          time: isPacked ? 'Packaged & verified ✓' : 'Merchant processing items...',
+          time: isPacked
+              ? 'Packaged & verified ✓'
+              : 'Merchant processing items...',
           isCompleted: isPacked,
           isCurrent: isPacked && !isRiderAssigned,
           isLast: false,
@@ -750,7 +1006,9 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
           themeState: themeState,
           isDark: isDark,
           title: 'Express Rider Dispatched to Store',
-          time: isRiderAssigned ? 'Courier arrived at store' : 'Awaiting rider assignment',
+          time: isRiderAssigned
+              ? 'Courier arrived at store'
+              : 'Awaiting rider assignment',
           isCompleted: isRiderAssigned,
           isCurrent: isRiderAssigned && !isInTransit,
           isLast: false,
@@ -772,7 +1030,9 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
           themeState: themeState,
           isDark: isDark,
           title: 'Delivered at Doorstep',
-          time: isDelivered ? 'Verified by Customer OTP ✓' : 'Pending OTP verification',
+          time: isDelivered
+              ? 'Verified by Customer OTP ✓'
+              : 'Pending OTP verification',
           isCompleted: isDelivered,
           isCurrent: isDelivered,
           isLast: true,
@@ -804,10 +1064,15 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
               decoration: BoxDecoration(
                 color: isCompleted
                     ? activeColor
-                    : (isDark ? const Color(0xFF262E3D) : const Color(0xFFCBD5E1)),
+                    : (isDark
+                          ? const Color(0xFF262E3D)
+                          : const Color(0xFFCBD5E1)),
                 shape: BoxShape.circle,
                 border: isCurrent
-                    ? Border.all(color: activeColor.withValues(alpha: 0.4), width: 4)
+                    ? Border.all(
+                        color: activeColor.withValues(alpha: 0.4),
+                        width: 4,
+                      )
                     : null,
               ),
               child: isCompleted
@@ -820,7 +1085,9 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
                 height: 44,
                 color: isCompleted
                     ? activeColor
-                    : (isDark ? const Color(0xFF262E3D) : const Color(0xFFE2E8F0)),
+                    : (isDark
+                          ? const Color(0xFF262E3D)
+                          : const Color(0xFFE2E8F0)),
               ),
           ],
         ),
@@ -840,7 +1107,10 @@ class _LiveOrderTrackingScreenState extends ConsumerState<LiveOrderTrackingScree
                   ),
                 ),
                 const SizedBox(height: 3),
-                Text(time, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                Text(
+                  time,
+                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                ),
               ],
             ),
           ),

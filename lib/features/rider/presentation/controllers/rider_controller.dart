@@ -125,6 +125,24 @@ class RiderController extends StateNotifier<RiderState> {
     if (success) await loadTasks();
     return success;
   }
+
+  Future<bool> remitCodCash({
+    required double amount,
+    required String channel,
+    required String referenceNumber,
+  }) async {
+    final success = await _repository.remitCodCash(
+      riderId: _riderId,
+      amount: amount,
+      channel: channel,
+      referenceNumber: referenceNumber,
+    );
+    if (success) {
+      final newCash = (state.codCashInHand - amount).clamp(0.0, double.infinity);
+      state = state.copyWith(codCashInHand: newCash);
+    }
+    return success;
+  }
 }
 
 final riderControllerProvider =

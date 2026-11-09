@@ -39,6 +39,15 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> with SingleTick
   PaymentMethod _selectedPayment = PaymentMethod.cashOnDelivery;
   bool _isPlacingOrder = false;
   final TextEditingController _walletPhoneController = TextEditingController();
+  final TextEditingController _instructionController = TextEditingController();
+  String _selectedInstruction = '📦 Fragile Crockery: Handle with extra care';
+  final List<String> _quickInstructions = [
+    '📦 Fragile Crockery: Handle with extra care',
+    '🚪 Leave package at doorstep / with security',
+    '🔔 Ring doorbell twice upon arrival',
+    '📞 Call customer when you reach the gate',
+    '⚡ Express delivery requested',
+  ];
   late final AnimationController _glowController;
 
   @override
@@ -53,6 +62,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> with SingleTick
   @override
   void dispose() {
     _walletPhoneController.dispose();
+    _instructionController.dispose();
     _glowController.dispose();
     super.dispose();
   }
@@ -127,6 +137,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> with SingleTick
     final computedDiscount = widget.directItem != null ? 0.0 : cartState.discountAmount;
     final computedGrandTotal = (computedSubtotal + computedShipping - computedDiscount).clamp(0.0, double.infinity);
 
+    final finalInstruction = _instructionController.text.trim().isNotEmpty
+        ? _instructionController.text.trim()
+        : _selectedInstruction;
+
     // 1. Create the order in SQLite with 'pending' payment status
     final order = await ref.read(ordersControllerProvider.notifier).placeOrder(
           customerId: user?.id ?? 'usr_guest',
@@ -138,6 +152,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> with SingleTick
           paymentMethod: _selectedPayment,
           customerLat: lat,
           customerLng: lng,
+          deliveryInstructions: finalInstruction,
         );
 
     if (order == null) {
@@ -601,6 +616,70 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> with SingleTick
                       ),
                     );
                   }),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Doorstep Instructions & Fragile Care Card
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF121722) : Colors.white,
+                borderRadius: BorderRadius.circular(AppDimensions.radiusMedium),
+                border: Border.all(color: isDark ? const Color(0xFF262E3D) : const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.shield_outlined, color: Colors.amber, size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Doorstep Instructions & Fragile Care',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Ensure delicate tableware safety and guide your express rider',
+                    style: TextStyle(fontSize: 11.5, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: _quickInstructions.map((inst) {
+                      final isSel = _selectedInstruction == inst;
+                      return ChoiceChip(
+                        label: Text(inst, style: TextStyle(fontSize: 11, fontWeight: isSel ? FontWeight.bold : FontWeight.normal)),
+                        selected: isSel,
+                        selectedColor: themeState.palette.primaryColor.withValues(alpha: 0.2),
+                        onSelected: (val) {
+                          if (val) {
+                            setState(() => _selectedInstruction = inst);
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _instructionController,
+                    style: const TextStyle(fontSize: 12.5),
+                    decoration: InputDecoration(
+                      hintText: 'Add custom note for delivery rider (optional)...',
+                      hintStyle: const TextStyle(fontSize: 11.5, color: Colors.grey),
+                      isDense: true,
+                      prefixIcon: const Icon(Icons.edit_note_rounded, size: 20),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                    ),
+                  ),
                 ],
               ),
             ),

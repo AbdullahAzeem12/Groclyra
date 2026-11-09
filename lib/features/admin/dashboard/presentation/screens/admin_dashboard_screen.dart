@@ -18,6 +18,7 @@ import 'package:groclyra/features/admin/data/repositories/admin_repository.dart'
 import 'package:groclyra/features/catalog/presentation/controllers/catalog_controller.dart';
 import 'package:groclyra/core/sync/sqlite_network_sync_service.dart';
 import '../widgets/sql_database_diagnostics_sheet.dart';
+import '../widgets/admin_banner_cms_dialog.dart';
 
 class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -282,6 +283,19 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen>
                       adminState.connectionStatus,
                     ),
                   ).animate().fadeIn(duration: 400.ms, delay: 410.ms),
+
+                  const SizedBox(height: 10),
+
+                  // ── PROMOTIONAL BANNERS CMS CARD ────────────────────────────
+                  _GovernanceCard(
+                    icon: Icons.campaign_rounded,
+                    iconColor: Colors.deepPurple,
+                    title: 'Promotions & Banner CMS',
+                    subtitle: 'Manage live homepage marketing carousels & deals',
+                    badgeCount: 0,
+                    onTap: () => AdminBannerCmsDialog.show(context),
+                    isDark: isDark,
+                  ),
 
                   const SizedBox(height: 20),
 
@@ -1545,11 +1559,15 @@ class _SyncFooter extends StatelessWidget {
           color: Colors.grey,
         ),
         const SizedBox(width: 6),
-        Text(
-          status.isHealthy
-              ? 'Last synced: $lastSyncLabel'
-              : 'Data unavailable — ${status.label}',
-          style: const TextStyle(fontSize: 11, color: Colors.grey),
+        Flexible(
+          child: Text(
+            status.isHealthy
+                ? 'Last synced: $lastSyncLabel'
+                : 'Data unavailable — ${status.label}',
+            style: const TextStyle(fontSize: 11, color: Colors.grey),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

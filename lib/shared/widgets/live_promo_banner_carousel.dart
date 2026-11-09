@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_dimensions.dart';
+import '../../core/database/daos/home_banner_dao.dart';
 import '../../features/catalog/domain/entities/category_entity.dart';
 import '../animations/spring_touch_scale.dart';
 
@@ -33,7 +36,7 @@ class PromoBannerItem {
   });
 }
 
-class LivePromoBannerCarousel extends StatefulWidget {
+class LivePromoBannerCarousel extends ConsumerStatefulWidget {
   final ValueChanged<PromoBannerItem>? onBannerTap;
   final MainCategoryType? activePillar;
 
@@ -44,16 +47,17 @@ class LivePromoBannerCarousel extends StatefulWidget {
   });
 
   @override
-  State<LivePromoBannerCarousel> createState() => _LivePromoBannerCarouselState();
+  ConsumerState<LivePromoBannerCarousel> createState() => _LivePromoBannerCarouselState();
 }
 
-class _LivePromoBannerCarouselState extends State<LivePromoBannerCarousel> {
+class _LivePromoBannerCarouselState extends ConsumerState<LivePromoBannerCarousel> {
   late final PageController _pageController;
   Timer? _autoSlideTimer;
   int _currentPage = 0;
   bool _isUserInteracting = false;
+  int _bannerCount = 4;
 
-  static const List<PromoBannerItem> _allBanners = [
+  static const List<PromoBannerItem> _fallbackBanners = [
     PromoBannerItem(
       id: 'banner_crockery',
       tag: '✨ ROYAL CROCKERY FESTIVAL • 35% OFF',
@@ -91,25 +95,50 @@ class _LivePromoBannerCarouselState extends State<LivePromoBannerCarousel> {
       id: 'banner_fastfood',
       tag: '🔥 CRAVINGS EXPRESS • FLAT 25% OFF',
       title: 'Crispy Broast, Burgers & Loaded Fries',
-      subtitle: 'Hot & Fresh from K&N\'s Deli, OPTP Grill & Partner Kitchens',
+      subtitle: "Hot & Fresh from K&N's Deli, OPTP Grill & Partner Kitchens",
       badgeText: 'HOT IN 25 MINS',
       floatingEmojis: '🍔🍟🍗',
       gradientColors: [Color(0xFF881337), Color(0xFFBE123C), Color(0xFFFF5722)],
       targetPillar: MainCategoryType.fastFood,
       ctaText: 'Order Food →',
     ),
-    PromoBannerItem(
-      id: 'banner_delivery',
-      tag: '⚡ ALL-PAKISTAN LIVE EXPRESS • ZERO FEE',
-      title: 'Free Doorstep Delivery on Rs. 1,999+',
-      subtitle: 'Shop verified partner marts across Karachi, Lahore & Islamabad',
-      badgeText: 'CODE: FREESHIP',
-      floatingEmojis: '⚡📦🇵🇰',
-      gradientColors: [Color(0xFF3B0764), Color(0xFF7E22CE), Color(0xFF0284C7)],
-      promoCode: 'FREESHIP',
-      ctaText: 'Apply Code →',
-    ),
   ];
+
+  static PromoBannerItem _mapRowToPromoBanner(Map<String, dynamic> r) {
+    List<Color> colors = [const Color(0xFF1E1B4B), const Color(0xFF3730A3), const Color(0xFF6366F1)];
+    try {
+      final rawColors = jsonDecode(r['gradientColorsJson']?.toString() ?? '[]') as List;
+      if (rawColors.isNotEmpty) {
+        colors = rawColors.map((c) => _hexToColor(c.toString())).toList();
+      }
+    } catch (_) {}
+
+    MainCategoryType? pillar;
+    final target = r['targetPillar']?.toString();
+    if (target != null && target.isNotEmpty) {
+      pillar = MainCategoryType.values.where((p) => p.name == target).firstOrNull;
+    }
+
+    return PromoBannerItem(
+      id: r['id']?.toString() ?? '',
+      tag: r['tag']?.toString() ?? '',
+      title: r['title']?.toString() ?? '',
+      subtitle: r['subtitle']?.toString() ?? '',
+      badgeText: r['badgeText']?.toString() ?? '',
+      floatingEmojis: r['floatingEmojis']?.toString() ?? '✨',
+      gradientColors: colors,
+      targetPillar: pillar,
+      ctaText: r['ctaText']?.toString() ?? 'Shop Offer →',
+    );
+  }
+
+  static Color _hexToColor(String hex) {
+    final clean = hex.replaceAll('#', '');
+    if (clean.length == 6) {
+      return Color(int.parse('FF$clean', radix: 16));
+    }
+    return const Color(0xFF4F46E5);
+  }
 
   @override
   void initState() {
@@ -121,8 +150,8 @@ class _LivePromoBannerCarouselState extends State<LivePromoBannerCarousel> {
   void _startAutoSlide() {
     _autoSlideTimer?.cancel();
     _autoSlideTimer = Timer.periodic(const Duration(milliseconds: 4000), (_) {
-      if (!_isUserInteracting && _pageController.hasClients) {
-        final nextPage = (_currentPage + 1) % _allBanners.length;
+      if (!_isUserInteracting && _pageController.hasClients && _bannerCount > 0) {
+        final nextPage = (_currentPage + 1) % _bannerCount;
         _pageController.animateToPage(
           nextPage,
           duration: const Duration(milliseconds: 650),
@@ -141,6 +170,13 @@ class _LivePromoBannerCarouselState extends State<LivePromoBannerCarousel> {
 
   @override
   Widget build(BuildContext context) {
+    final bannersAsync = ref.watch(activeHomeBannersStreamProvider);
+    final dbRows = bannersAsync.value ?? [];
+    final banners = dbRows.isNotEmpty
+        ? dbRows.map(_mapRowToPromoBanner).toList()
+        : _fallbackBanners;
+    _bannerCount = banners.length;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -157,14 +193,14 @@ class _LivePromoBannerCarouselState extends State<LivePromoBannerCarousel> {
             },
             child: PageView.builder(
               controller: _pageController,
-              itemCount: _allBanners.length,
+              itemCount: banners.length,
               onPageChanged: (index) {
                 setState(() {
                   _currentPage = index;
                 });
               },
               itemBuilder: (context, index) {
-                final banner = _allBanners[index];
+                final banner = banners[index];
                 return AnimatedBuilder(
                   animation: _pageController,
                   builder: (context, child) {
@@ -397,8 +433,11 @@ class _LivePromoBannerCarouselState extends State<LivePromoBannerCarousel> {
         // Animated Smooth Indicator Bar
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(_allBanners.length, (index) {
+          children: List.generate(banners.length, (index) {
             final isActive = _currentPage == index;
+            final activeColor = banners[index].gradientColors.length > 1
+                ? banners[index].gradientColors[1]
+                : banners[index].gradientColors[0];
             return AnimatedContainer(
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeOutCubic,
@@ -407,13 +446,13 @@ class _LivePromoBannerCarouselState extends State<LivePromoBannerCarousel> {
               height: 5.5,
               decoration: BoxDecoration(
                 color: isActive
-                    ? _allBanners[index].gradientColors[1]
+                    ? activeColor
                     : Colors.grey.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(3),
                 boxShadow: isActive
                     ? [
                         BoxShadow(
-                          color: _allBanners[index].gradientColors[1].withValues(alpha: 0.5),
+                          color: activeColor.withValues(alpha: 0.5),
                           blurRadius: 4,
                           offset: const Offset(0, 1),
                         ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:groclyra/shared/animations/spring_touch_scale.dart';
 import 'package:groclyra/core/constants/app_dimensions.dart';
 import 'package:groclyra/core/theme/theme_controller.dart';
@@ -69,6 +70,18 @@ class _InventoryManagementScreenState
           title: 'Inventory Control',
           subtitle: '${products.length} SKUs • ${CurrencyFormatter.format(totalValue)} Value',
           showThemePicker: false,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.file_upload_outlined, color: Colors.white),
+              tooltip: 'Bulk Restock / Import',
+              onPressed: () => _showBulkRestockDialog(context, [...low, ...critical], isDark, primary),
+            ),
+            IconButton(
+              icon: const Icon(Icons.file_download_outlined, color: Colors.white),
+              tooltip: 'Export Catalog (CSV)',
+              onPressed: () => _exportInventoryCsv(products),
+            ),
+          ],
           bottom: TabBar(
             controller: _tabController,
             indicatorColor: Colors.white,
@@ -492,6 +505,21 @@ class _InventoryManagementScreenState
             child: const Text('Set Stock'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _exportInventoryCsv(List<ProductEntity> products) {
+    final buffer = StringBuffer();
+    buffer.writeln('SKU_ID,Title,Category,Price_PKR,Current_Stock,In_Stock');
+    for (final p in products) {
+      final safeTitle = p.title.replaceAll(',', ' ');
+      buffer.writeln('${p.id},$safeTitle,${p.categoryName},${p.salePrice.toStringAsFixed(0)},${p.totalStock},${p.inStock ? 1 : 0}');
+    }
+    SharePlus.instance.share(
+      ShareParams(
+        text: buffer.toString(),
+        subject: 'Groclyra_Inventory_Report.csv',
       ),
     );
   }

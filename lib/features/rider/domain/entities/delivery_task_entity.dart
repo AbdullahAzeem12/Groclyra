@@ -30,6 +30,7 @@ class DeliveryTaskEntity {
   final DeliveryTaskStatus status;
   final String customerOtp;
   final DateTime assignedAt;
+  final String? deliveryInstructions;
 
   const DeliveryTaskEntity({
     required this.id,
@@ -47,6 +48,7 @@ class DeliveryTaskEntity {
     required this.status,
     required this.customerOtp,
     required this.assignedAt,
+    this.deliveryInstructions = '📦 Fragile Crockery: Handle with extra care',
   });
 
   bool get isCod => codAmount > 0;

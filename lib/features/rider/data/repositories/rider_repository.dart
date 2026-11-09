@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:groclyra/core/database/app_database.dart';
+import 'package:groclyra/features/notifications/data/notifications_repository.dart';
 import '../../domain/entities/delivery_task_entity.dart';
 
 /// SQL-backed RiderRepository (SQLite).
@@ -319,6 +320,29 @@ class RiderRepository {
 
     await _database.update('orders', existing, where: 'id = ?', whereArgs: [orderId]);
     _database.notifyTable('orders');
+
+    // Dispatch real-time customer notification for outForDelivery and delivered
+    final customerId = existing['customerId']?.toString() ?? fullData['customerId']?.toString() ?? '';
+    final orderNum = existing['orderNumber']?.toString() ?? orderId;
+    if (customerId.isNotEmpty) {
+      if (newStatus == 'outForDelivery') {
+        NotificationDispatcher().toUser(
+          recipientId: customerId,
+          kind: 'outForDelivery',
+          title: '🚚 Order #$orderNum Out for Delivery!',
+          body: 'Your express courier is on the road heading to your doorstep.',
+          data: {'orderId': orderId, 'orderNumber': orderNum},
+        );
+      } else if (newStatus == 'delivered') {
+        NotificationDispatcher().toUser(
+          recipientId: customerId,
+          kind: 'delivered',
+          title: '✅ Order #$orderNum Delivered!',
+          body: 'Package delivered and verified via customer OTP. Thank you for shopping with Groclyra!',
+          data: {'orderId': orderId, 'orderNumber': orderNum},
+        );
+      }
+    }
   }
 
   Future<void> _updateSubOrderDelivered(String orderId, String subOrderId) async {
@@ -355,6 +379,19 @@ class RiderRepository {
 
     await _database.update('orders', existing, where: 'id = ?', whereArgs: [orderId]);
     _database.notifyTable('orders');
+
+    // Dispatch real-time customer notification
+    final customerId = existing['customerId']?.toString() ?? fullData['customerId']?.toString() ?? '';
+    final orderNum = existing['orderNumber']?.toString() ?? orderId;
+    if (customerId.isNotEmpty && allDelivered) {
+      NotificationDispatcher().toUser(
+        recipientId: customerId,
+        kind: 'delivered',
+        title: '✅ Order #$orderNum Delivered!',
+        body: 'Package delivered and verified via customer OTP. Thank you for shopping with Groclyra!',
+        data: {'orderId': orderId, 'orderNumber': orderNum},
+      );
+    }
   }
 
   /// Creates a delivery task document in SQLite.

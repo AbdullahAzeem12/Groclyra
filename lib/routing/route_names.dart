@@ -46,6 +46,7 @@ class RouteNames {
   static const String riderPod = '/rider/pod';
   static const String riderCod = '/rider/cod';
   static const String riderEarnings = '/rider/earnings';
+  static const String riderScanner = '/rider/scanner';
 
   // Admin Shell
   static const String adminDashboard = '/admin';

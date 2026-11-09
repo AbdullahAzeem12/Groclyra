@@ -15,18 +15,15 @@ import 'package:groclyra/features/rider/presentation/controllers/rider_controlle
 class PodVerificationScreen extends ConsumerStatefulWidget {
   final String taskId;
 
-  const PodVerificationScreen({
-    super.key,
-    required this.taskId,
-  });
+  const PodVerificationScreen({super.key, required this.taskId});
 
   @override
-  ConsumerState<PodVerificationScreen> createState() => _PodVerificationScreenState();
+  ConsumerState<PodVerificationScreen> createState() =>
+      _PodVerificationScreenState();
 }
 
 class _PodVerificationScreenState extends ConsumerState<PodVerificationScreen> {
-  final _otpController =
-      TextEditingController(text: kDebugMode ? '4829' : '');
+  final _otpController = TextEditingController(text: kDebugMode ? '4829' : '');
   bool _isSubmitting = false;
 
   final List<Offset?> _signaturePoints = [];
@@ -52,9 +49,9 @@ class _PodVerificationScreenState extends ConsumerState<PodVerificationScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Camera error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Camera error: $e')));
       }
     }
   }
@@ -78,13 +75,21 @@ class _PodVerificationScreenState extends ConsumerState<PodVerificationScreen> {
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
           scrollable: true,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppDimensions.radiusLarge)),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppDimensions.radiusLarge),
+          ),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 24,
+          ),
           title: const Column(
             children: [
               Icon(Icons.check_circle_rounded, color: Colors.green, size: 54),
               SizedBox(height: 12),
-              Text('Delivery Verified!', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
+              Text(
+                'Delivery Verified!',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+              ),
             ],
           ),
           content: const SingleChildScrollView(
@@ -111,7 +116,9 @@ class _PodVerificationScreenState extends ConsumerState<PodVerificationScreen> {
       );
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid OTP code. Please check with the customer.')),
+        const SnackBar(
+          content: Text('Invalid OTP code. Please check with the customer.'),
+        ),
       );
     }
   }
@@ -130,6 +137,13 @@ class _PodVerificationScreenState extends ConsumerState<PodVerificationScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Proof of Delivery (POD)'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.qr_code_scanner_rounded),
+            tooltip: 'Scan Invoice Barcode',
+            onPressed: () => context.push(RouteNames.riderScanner),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -142,18 +156,34 @@ class _PodVerificationScreenState extends ConsumerState<PodVerificationScreen> {
               decoration: BoxDecoration(
                 color: isDark ? const Color(0xFF121722) : Colors.white,
                 borderRadius: BorderRadius.circular(AppDimensions.radiusMedium),
-                border: Border.all(color: isDark ? const Color(0xFF262E3D) : const Color(0xFFE2E8F0)),
+                border: Border.all(
+                  color: isDark
+                      ? const Color(0xFF262E3D)
+                      : const Color(0xFFE2E8F0),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Handover for Order #${task.orderNumber}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text(
+                    'Handover for Order #${task.orderNumber}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
                   const SizedBox(height: 4),
-                  Text('Customer: ${task.customerName} • ${task.customerPhone}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  Text(
+                    'Customer: ${task.customerName} • ${task.customerPhone}',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                   const SizedBox(height: 8),
                   if (task.isCod)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.green.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(4),
@@ -161,8 +191,21 @@ class _PodVerificationScreenState extends ConsumerState<PodVerificationScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('COD Amount to Collect:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                          Text(CurrencyFormatter.format(task.codAmount), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 14)),
+                          const Text(
+                            'COD Amount to Collect:',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                          Text(
+                            CurrencyFormatter.format(task.codAmount),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green,
+                              fontSize: 14,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -172,11 +215,17 @@ class _PodVerificationScreenState extends ConsumerState<PodVerificationScreen> {
             const SizedBox(height: 20),
 
             // Step 1: Customer 4-digit OTP
-            Text('1. Customer Verification OTP', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              '1. Customer Verification OTP',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 4),
             const Text(
-                'Ask customer for the 4-digit OTP displayed on their order tracking screen${kDebugMode ? ' (Demo: 4829)' : ''}:',
-                style: TextStyle(fontSize: 12, color: Colors.grey)),
+              'Ask customer for the 4-digit OTP displayed on their order tracking screen${kDebugMode ? ' (Demo: 4829)' : ''}:',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
             const SizedBox(height: 8),
             CustomTextField(
               label: '4-Digit Handover Code',
@@ -190,7 +239,12 @@ class _PodVerificationScreenState extends ConsumerState<PodVerificationScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('2. Recipient Signature Pad', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                Text(
+                  '2. Recipient Signature Pad',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 if (_signaturePoints.isNotEmpty)
                   TextButton.icon(
                     icon: const Icon(Icons.clear_rounded, size: 16),
@@ -209,10 +263,14 @@ class _PodVerificationScreenState extends ConsumerState<PodVerificationScreen> {
               height: 120,
               width: double.infinity,
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF181E2B) : const Color(0xFFF8F9FD),
+                color: isDark
+                    ? const Color(0xFF181E2B)
+                    : const Color(0xFFF8F9FD),
                 borderRadius: BorderRadius.circular(AppDimensions.radiusMedium),
                 border: Border.all(
-                  color: _signaturePoints.isNotEmpty ? themeState.palette.primaryColor : Colors.grey.withValues(alpha: 0.3),
+                  color: _signaturePoints.isNotEmpty
+                      ? themeState.palette.primaryColor
+                      : Colors.grey.withValues(alpha: 0.3),
                   width: _signaturePoints.isNotEmpty ? 1.5 : 1,
                 ),
               ),
@@ -247,11 +305,17 @@ class _PodVerificationScreenState extends ConsumerState<PodVerificationScreen> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.draw_rounded, color: Colors.grey.withValues(alpha: 0.6)),
+                              Icon(
+                                Icons.draw_rounded,
+                                color: Colors.grey.withValues(alpha: 0.6),
+                              ),
                               const SizedBox(width: 8),
                               const Text(
                                 'Sign Here (Fingertip)',
-                                style: TextStyle(fontSize: 13, color: Colors.grey),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey,
+                                ),
                               ),
                             ],
                           ),
@@ -264,7 +328,12 @@ class _PodVerificationScreenState extends ConsumerState<PodVerificationScreen> {
             const SizedBox(height: 20),
 
             // Step 3: Photo & GPS Stamp
-            Text('3. Doorstep Package Snapshot', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text(
+              '3. Doorstep Package Snapshot',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 4),
             const Text(
               'Capture verified photo proof of package handed over or left at door:',
@@ -276,9 +345,15 @@ class _PodVerificationScreenState extends ConsumerState<PodVerificationScreen> {
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF181E2B) : const Color(0xFFF8F9FD),
-                  borderRadius: BorderRadius.circular(AppDimensions.radiusMedium),
-                  border: Border.all(color: Colors.green.withValues(alpha: 0.5)),
+                  color: isDark
+                      ? const Color(0xFF181E2B)
+                      : const Color(0xFFF8F9FD),
+                  borderRadius: BorderRadius.circular(
+                    AppDimensions.radiusMedium,
+                  ),
+                  border: Border.all(
+                    color: Colors.green.withValues(alpha: 0.5),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -298,23 +373,41 @@ class _PodVerificationScreenState extends ConsumerState<PodVerificationScreen> {
                         children: [
                           const Row(
                             children: [
-                              Icon(Icons.check_circle_rounded, color: Colors.green, size: 16),
+                              Icon(
+                                Icons.check_circle_rounded,
+                                color: Colors.green,
+                                size: 16,
+                              ),
                               SizedBox(width: 4),
-                              Text('Photo Verified ✓', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.green)),
+                              Text(
+                                'Photo Verified ✓',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: Colors.green,
+                                ),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 4),
                           Text(
                             'Logged at ${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')}',
-                            style: const TextStyle(fontSize: 11, color: Colors.grey),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey,
+                            ),
                           ),
                         ],
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.refresh_rounded, color: Colors.blue),
+                      icon: const Icon(
+                        Icons.refresh_rounded,
+                        color: Colors.blue,
+                      ),
                       tooltip: 'Retake Photo',
-                      onPressed: () => _captureDoorstepPhoto(ImageSource.camera),
+                      onPressed: () =>
+                          _captureDoorstepPhoto(ImageSource.camera),
                     ),
                   ],
                 ),
@@ -325,13 +418,24 @@ class _PodVerificationScreenState extends ConsumerState<PodVerificationScreen> {
                   Expanded(
                     child: OutlinedButton.icon(
                       icon: const Icon(Icons.camera_alt_rounded, size: 18),
-                      label: const Text('Take Doorstep Photo', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      label: const Text(
+                        'Take Doorstep Photo',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        side: BorderSide(color: themeState.palette.primaryColor),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        side: BorderSide(
+                          color: themeState.palette.primaryColor,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
-                      onPressed: () => _captureDoorstepPhoto(ImageSource.camera),
+                      onPressed: () =>
+                          _captureDoorstepPhoto(ImageSource.camera),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -348,7 +452,9 @@ class _PodVerificationScreenState extends ConsumerState<PodVerificationScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF181E2B) : const Color(0xFFF8F9FD),
+                color: isDark
+                    ? const Color(0xFF181E2B)
+                    : const Color(0xFFF8F9FD),
                 borderRadius: BorderRadius.circular(AppDimensions.radiusMedium),
                 border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
               ),
@@ -360,8 +466,17 @@ class _PodVerificationScreenState extends ConsumerState<PodVerificationScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('GPS Coordinates Locked & Encrypted', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                        Text('Precision GPS matched within 12 meters of destination pin', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                        Text(
+                          'GPS Coordinates Locked & Encrypted',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                        Text(
+                          'Precision GPS matched within 12 meters of destination pin',
+                          style: TextStyle(fontSize: 10, color: Colors.grey),
+                        ),
                       ],
                     ),
                   ),

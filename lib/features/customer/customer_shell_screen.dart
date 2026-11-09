@@ -1,13 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:groclyra/core/services/in_app_notification_alert_service.dart';
+import 'package:groclyra/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:groclyra/routing/route_names.dart';
 import 'package:groclyra/features/customer/cart/presentation/controllers/cart_controller.dart';
 
-class CustomerShellScreen extends ConsumerWidget {
+class CustomerShellScreen extends ConsumerStatefulWidget {
   final Widget child;
 
   const CustomerShellScreen({super.key, required this.child});
+
+  @override
+  ConsumerState<CustomerShellScreen> createState() => _CustomerShellScreenState();
+}
+
+class _CustomerShellScreenState extends ConsumerState<CustomerShellScreen> {
+  String? _listeningUserId;
+
+  @override
+  void initState() {
+    super.initState();
+    InAppNotificationAlertService.instance.init();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _setupNotificationListener();
+    });
+  }
+
+  void _setupNotificationListener() {
+    final user = ref.read(authControllerProvider).user;
+    if (user != null && user.id.isNotEmpty && _listeningUserId != user.id) {
+      _listeningUserId = user.id;
+      InAppNotificationAlertService.instance.startListening(context, user.id);
+    }
+  }
+
+  @override
+  void dispose() {
+    InAppNotificationAlertService.instance.stop();
+    super.dispose();
+  }
 
   int _calculateSelectedIndex(BuildContext context) {
     final String location = GoRouterState.of(context).uri.toString();
@@ -43,7 +75,15 @@ class CustomerShellScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    ref.listen(authControllerProvider, (prev, next) {
+      final user = next.user;
+      if (user != null && user.id.isNotEmpty && _listeningUserId != user.id) {
+        _listeningUserId = user.id;
+        InAppNotificationAlertService.instance.startListening(context, user.id);
+      }
+    });
+
     final cartState = ref.watch(cartControllerProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final selectedIndex = _calculateSelectedIndex(context);
@@ -57,7 +97,7 @@ class CustomerShellScreen extends ConsumerWidget {
         }
       },
       child: Scaffold(
-        body: child,
+        body: widget.child,
         bottomNavigationBar: Container(
           decoration: BoxDecoration(
             color: isDark ? const Color(0xFF121722) : Colors.white,

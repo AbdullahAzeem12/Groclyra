@@ -48,6 +48,13 @@
             android:name="com.yalantis.ucrop.UCropActivity"
             android:screenOrientation="portrait"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
+
+        <!-- Geolocator Foreground Service for Background Rider Location Tracking -->
+        <service
+            android:name="com.baseflow.geolocator.GeolocatorLocationService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location" />
             
         <!-- Google Maps API Key Placeholder -->
         <meta-data android:name="com.google.android.geo.API_KEY"

@@ -15,6 +15,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:groclyra/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:groclyra/core/services/maps_service.dart';
+import 'package:groclyra/core/services/rider_background_location_service.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:groclyra/shared/animations/rotating_border_glow_card.dart';
 import 'package:groclyra/shared/animations/spring_touch_scale.dart';
@@ -83,6 +84,11 @@ class _RiderDashboardScreenState extends ConsumerState<RiderDashboardScreen> wit
         showNotificationBell: true,
         actions: [
           IconButton(
+            tooltip: 'Scan Parcel Barcode / QR',
+            icon: const Icon(Icons.qr_code_scanner_rounded, color: Colors.white),
+            onPressed: () => context.push(RouteNames.riderScanner),
+          ),
+          IconButton(
             tooltip: 'Switch Portal',
             icon: const Icon(Icons.swap_horiz_rounded, color: Colors.white),
             onPressed: () => context.go(RouteNames.login),
@@ -139,6 +145,12 @@ class _RiderDashboardScreenState extends ConsumerState<RiderDashboardScreen> wit
                       activeThumbColor: Colors.green,
                       onChanged: (val) {
                         ref.read(riderControllerProvider.notifier).toggleOnline(val);
+                        final riderId = authState.user?.id ?? '';
+                        if (val && riderId.isNotEmpty) {
+                          ref.read(riderBackgroundLocationProvider.notifier).startTracking(riderId);
+                        } else {
+                          ref.read(riderBackgroundLocationProvider.notifier).stopTracking();
+                        }
                       },
                     ),
                   ],
@@ -388,6 +400,13 @@ class _RiderDashboardScreenState extends ConsumerState<RiderDashboardScreen> wit
             ],
           ),
         ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: const Color(0xFF10B981),
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.qr_code_scanner_rounded),
+        label: const Text('Scan Parcel Barcode'),
+        onPressed: () => context.push(RouteNames.riderScanner),
       ),
     );
   }

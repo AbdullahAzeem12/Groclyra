@@ -55,6 +55,7 @@ import '../features/rider/deliveries/presentation/screens/active_delivery_queue_
 import '../features/rider/navigation/presentation/screens/rider_route_navigation_screen.dart';
 import '../features/rider/proof_of_delivery/presentation/screens/pod_verification_screen.dart';
 import '../features/rider/cod/presentation/screens/cod_cash_reconciliation_screen.dart';
+import '../features/rider/scanner/presentation/screens/parcel_barcode_scanner_screen.dart';
 
 // Admin Screens
 import '../features/admin/admin_shell_screen.dart';
@@ -379,6 +380,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final id = state.pathParameters['id'] ?? 'task_01';
           return PodVerificationScreen(taskId: id);
         },
+      ),
+      GoRoute(
+        parentNavigatorKey: rootNavigatorKey,
+        path: RouteNames.riderScanner,
+        builder: (context, state) => const ParcelBarcodeScannerScreen(),
       ),
 
       // 4. Admin Shell
